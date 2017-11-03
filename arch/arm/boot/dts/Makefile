@@ -286,12 +286,22 @@ dtb-$(CONFIG_MACH_J3XNLTE) += sprd-scx35l_sharkls_j3xnlte_rev00.dtb \
 				sprd-scx35l_sharkls_j3xnlte_rev03.dtb \
 				sprd-scx35l_sharkls_j3xnlte_rev04.dtb \
 				sprd-scx35l_sharkls_j3xnlte_rev05.dtb
+#Changes done For J2PRO
+ifeq ($(CONFIG_MACH_J2XLTE_SWA_INS), y)
+dtb-$(CONFIG_MACH_J2XLTE) += sprd-scx35l_sharkls_j2xltepro_rev00.dtb \
+				sprd-scx35l_sharkls_j2xltepro_rev01.dtb \
+				sprd-scx35l_sharkls_j2xltepro_rev02.dtb \
+				sprd-scx35l_sharkls_j2xltepro_rev03.dtb \
+				sprd-scx35l_sharkls_j2xltepro_rev04.dtb \
+				sprd-scx35l_sharkls_j2xltepro_rev05.dtb 
+else
 dtb-$(CONFIG_MACH_J2XLTE) += sprd-scx35l_sharkls_j2xlte_rev00.dtb \
 				sprd-scx35l_sharkls_j2xlte_rev01.dtb \
 				sprd-scx35l_sharkls_j2xlte_rev02.dtb \
 				sprd-scx35l_sharkls_j2xlte_rev03.dtb \
 				sprd-scx35l_sharkls_j2xlte_rev04.dtb \
-				sprd-scx35l_sharkls_j2xlte_rev05.dtb 
+				sprd-scx35l_sharkls_j2xlte_rev05.dtb
+endif
 dtb-$(CONFIG_MACH_GTEXSLTE) += sprd-scx35l_sharkls_gtexslte_rev00.dtb \
 				sprd-scx35l_sharkls_gtexslte_rev01.dtb \
 				sprd-scx35l_sharkls_gtexslte_rev02.dtb \

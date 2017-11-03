@@ -598,6 +598,17 @@ config MACH_J2XLTE
 	help
 	SPX35L board based on shark-l serial.
 
+config MACH_J2XLTE_SWA_INS
+	bool "sharkl_j2xlte_Board"
+	depends on ARCH_SC
+	depends on ARCH_SCX35
+	depends on ARCH_SCX35L
+	default n
+	select COMMON_CLK if OF
+	select CLKSRC_OF if OF
+	help
+	SPX35L board based on shark-l serial.
+
 config MACH_GTEXSLTE
 	bool "sharkl_gtexslte_Board"
 	depends on ARCH_SC

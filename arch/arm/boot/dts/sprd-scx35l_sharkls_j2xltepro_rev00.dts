@@ -34,7 +34,7 @@
 / {
 	model = "Spreadtrum SP8835EB board";
 	compatible = "sprd,sp8835eb";
-	sprd,sc-id = <9830 2 0x20000>;
+	sprd,sc-id = <9830 0 0x20000>;
 	#address-cells = <1>;
 	#size-cells = <1>;
 	interrupt-parent = <&gic>;
@@ -47,7 +47,7 @@
 
 	memory {
 		device_type = "memory";
-		reg = <0x80000000 0x60000000>;
+		reg = <0x80000000 0x7FE00000>;
 	};
 
 	aliases {
@@ -397,22 +397,29 @@
 		gpios = <&d_gpio_gpio 53 0 /* sda */
 					&d_gpio_gpio 55 0 >; /* scl */
 		i2c-gpio,delay-us = <10>;    /* ~100 kHz */
-		i2c-gpio,timeout-ms = <0>;
+		i2c-gpio,timeout-ms = <5>;
 		status = "okay";
-
-		coreriver@20 {
-			compatible = "coreriver,coreriver-tkey";
-			reg = <0x20>;
+		
+		melfas_mip4_tk@49 {
+			compatible = "melfas,mip4_tk";
+			reg = <0x49>;
 			interrupt-parent = <&d_gpio_gpio>;
-			coreriver,irq-gpio = <&d_gpio_gpio 90 0>;
-			coreriver,sda-gpio = <&d_gpio_gpio 53 0>;
-			coreriver,scl-gpio = <&d_gpio_gpio 55 0>;
-			coreriver,vcc_en-gpio = <&d_gpio_gpio 140 0>;
-			coreriver,fw_name = "coreriver/j3xlte.fw";
-			coreriver,ext_fw_name = "/sdcard/tc350k_j3xlte.bin";
-			coreriver,sensing_ch_num = <4>;
-			coreriver,tsk_ic_num = <1>;  /* tc300k : 0x00, tc350k : 0x01 */
-			coreriver,firm-up; /* if, firmware auto update NOT required, comment or remove it */
+			/*
+			interrupts = <90 0>;
+			vdd_led-supply = <&pm8941_l13>;
+			vcc_en-supply = <&d_gpio_gpio 140 0>;;
+			*/
+			/* vcc_en-supply = "vddvibr";
+			vcc_en-reg_volt = <3000000>;  */  /* 3V */
+			mip4_tk,i2c-pull-up = <1>;
+			mip4_tk,scl-gpio = <&d_gpio_gpio 55 0x00>;
+			mip4_tk,sda-gpio = <&d_gpio_gpio 53 0x00>;
+			mip4_tk,irq-gpio = <&d_gpio_gpio 90 0x1>;
+			mip4_tk,vcc_en-gpio = <&d_gpio_gpio 140 0>;
+			/* mip4_tk,irq_grip-gpio = <&d_gpio_gpio 90 0x1>; */
+			mip4_tk,keynum = <2>;
+			/* mip4_tk,keycode = <139 158>; */
+			mip4_tk,keycode = <158 139>;
 		};
 	};
 
@@ -425,25 +432,31 @@
 		i2c-gpio,delay-us = <10>;	/* ~100 kHz */
 		i2c-gpio,timeout-ms = <0>;
 
-		cm36672p@60 {
-			compatible = "cm36672p";
-			reg = <0x60>;
+		stk3013@48 {
+			compatible = "stk,stk3013";
+			reg = <0x48>;
 			pinctrl-names = "default";
 			interrupt-parent = <&d_gpio_gpio>;
 			interrupts = <95 0>;
-			cm36672p,vdd-supply = <&vdd28>;
-			cm36672p,leden_gpio = <&d_gpio_gpio 141 0x00>;
-			cm36672p,irq_gpio = <&d_gpio_gpio 95 0x00>;
-			cm36672p,default_hi_thd = <19>;
-			cm36672p,default_low_thd = <13>;
-			cm36672p,cancel_hi_thd = <10>;
-			cm36672p,cancel_low_thd = <7>;
-			cm36672p,ps_duty = <2>;
-			cm36672p,ps_it = <4>;
-			cm36672p,led_current = <7>;
-			cm36672p,default_trim = <3>;
+			stk,vdd-supply = <&vdd28>;
+			stk,irq-gpio = <&d_gpio_gpio 95 0x00>;
+			stk,leden_gpio = <&d_gpio_gpio 141 0x00>;
+			stk,state-reg = <0x2d>;
+			stk,psctrl-reg = <0x70>;
+			stk,alsctrl-reg = <0x2A>;
+			stk,ledctrl-reg = <0xFF>;
+			stk,wait-reg = <0x03>;
+			stk,ps-thd-h = <18>;
+			stk,ps-thd-l = <13>;
+			stk,ps-cancel-thd-h = <10>;
+			stk,ps-cancel-thd-l = <7>;
+			stk,ps-cal-skip-adc = <8>;
+			stk,ps-cal-fail-adc = <17>;
+			stk,ps-default-offset = <0>;
+			stk,transmittance = <500>;
 		};
 	};
+	
 	i2c_gpio10: i2c_gpio@5 {
 		compatible = "i2c-gpio";
 		#address-cells = <1>;
@@ -463,11 +476,11 @@
 			sx9310-i2c,gripen_gpio = <&d_gpio_gpio 17 0x00>;
 		};
 	};
-	
+		
 	smartglow {
 		compatible = "smartglow";		
 	};
-	
+		
 	i2c_gpio11: i2c_gpio@6 {
 		compatible = "i2c-gpio";
 		#address-cells = <1>;
@@ -477,29 +490,14 @@
 		i2c-gpio,delay-us = <10>;	/* ~100 kHz */
 		i2c-gpio,timeout-ms = <0>;
 
-		an30259a@33 {
-			compatible = "an30259a,smartglow";
-			reg = <0x33>;
-			an30259a,led-num = <1>;
-			an30259a,iMax = <0x0>;
-			an30259a,clk_mode = <0x4>;
-			an30259a,led-name = "led_1";
-			an30259a,rgb-name = "led_r1", "led_g1", "led_b1";
-			an30259a,brightness = <0 0 0>;
-			an30259a,maxbrightness = <255 255 255>;
-			an30259a,default_current = <0xFF 0xFF 0xFF>;
-			an30259a,lowpower_current = <0xf 0xf 0xf>;
-			an30259a,offset_current = <0x0 0x0 0x0>;
-			an30259a,flags = <0x0 0x0 0x0>;
-		};
 		an30259a@30 {
 			compatible = "an30259a,smartglow";
 			reg = <0x30>;
-			an30259a,led-num = <2>;
+			an30259a,led-num = <1>;
 			an30259a,iMax = <0x0>;
 			an30259a,clk_mode = <0x6>;
-			an30259a,led-name = "led_2";
-			an30259a,rgb-name = "led_r2", "led_g2", "led_b2";
+			an30259a,led-name = "led_1";
+			an30259a,rgb-name = "led_r1", "led_g1", "led_b1";
 			an30259a,brightness = <0 0 0>;
 			an30259a,maxbrightness = <255 255 255>;
 			an30259a,default_current = <0xFF 0xFF 0xFF>;
@@ -510,6 +508,21 @@
 		an30259a@31 {
 			compatible = "an30259a,smartglow";
 			reg = <0x31>;
+			an30259a,led-num = <2>;
+			an30259a,iMax = <0x0>;
+			an30259a,clk_mode = <0x4>;
+			an30259a,led-name = "led_2";
+			an30259a,rgb-name = "led_r2", "led_g2", "led_b2";
+			an30259a,brightness = <0 0 0>;
+			an30259a,maxbrightness = <255 255 255>;
+			an30259a,default_current = <0xFF 0xFF 0xFF>;
+			an30259a,lowpower_current = <0xf 0xf 0xf>;
+			an30259a,offset_current = <0x0 0x0 0x0>;
+			an30259a,flags = <0x0 0x0 0x0>;
+		};
+		an30259a@32 {
+			compatible = "an30259a,smartglow";
+			reg = <0x32>;
 			an30259a,led-num = <3>;
 			an30259a,iMax = <0x0>;
 			an30259a,clk_mode = <0x4>;
@@ -522,9 +535,9 @@
 			an30259a,offset_current = <0x0 0x0 0x0>;
 			an30259a,flags = <0x0 0x0 0x0>;
 		};
-		an30259a@32 {
+		an30259a@33 {
 			compatible = "an30259a,smartglow";
-			reg = <0x32>;
+			reg = <0x33>;
 			an30259a,led-num = <4>;
 			an30259a,iMax = <0x0>;
 			an30259a,clk_mode = <0x4>;
@@ -757,13 +770,20 @@
 			};
 		};
 
-		bma_acc@18 {
-			compatible = "bma2x2";
-			reg = <0x18>;
+		k2hh@1D {
+			compatible = "stm,k2hh";
+			reg = <0x1D>;
 			interrupt-parent = <&d_gpio_gpio>;
 			interrupts = <135 0>;
-			bma2x2,gpio_int1 = <&d_gpio_gpio 135 0x00>;
-			bma2x2,accel_place = <3>;
+			stm,irq_gpio = <&d_gpio_gpio 135 0x00>;
+			stm,axis_map_x = <0>;
+			stm,axis_map_y = <1>;
+			stm,axis_map_z = <2>;
+			stm,negate_x = <0>;
+			stm,negate_y = <1>;
+			stm,negate_z = <0>;
+			stm,poll_interval = <100>;
+			stm,min_interval = <2>;
 		};
 	};
 
@@ -1140,7 +1160,6 @@
 		reg = <0x20200000 0x1000>;
 		tune_value = <0x078e33>;
 		usb-supply = <&vddusb>;
-		phy-type = "usb20_synops_phy";
 		#address-cells = <1>;
 		#size-cells = <0>;
 	};

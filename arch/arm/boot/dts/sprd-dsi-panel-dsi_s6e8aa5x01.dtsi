@@ -344,7 +344,8 @@
 						00 00
 		];
 		gen-panel-gamma-update-cmds = [
-			15 00 00 05 00 02	F7 03
+			15 00 00 05 00 02	F7 03 
+			15 00 00 01 00 02	F7 00 
 		];
 		gen-panel-read-hbm = [
 			C8 21 06

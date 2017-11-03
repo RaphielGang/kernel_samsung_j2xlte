@@ -34,7 +34,7 @@
 / {
 	model = "Spreadtrum SP8835EB board";
 	compatible = "sprd,sp8835eb";
-	sprd,sc-id = <9830 2 0x20000>;
+	sprd,sc-id = <9830 4 0x20000>;
 	#address-cells = <1>;
 	#size-cells = <1>;
 	interrupt-parent = <&gic>;
@@ -47,7 +47,7 @@
 
 	memory {
 		device_type = "memory";
-		reg = <0x80000000 0x60000000>;
+		reg = <0x80000000 0x7FE00000>;
 	};
 
 	aliases {
@@ -69,7 +69,6 @@
 		i2c_gpio8 = &i2c_gpio8;
 		i2c_gpio9 = &i2c_gpio9;
 		i2c_gpio10 = &i2c_gpio10;
-		i2c_gpio11 = &i2c_gpio11;
 	};
 
 	cpus {
@@ -340,8 +339,8 @@
 			irq_trigger_level_button = <1>;
 			adc_threshold_gnd_average = <400>;
 			adc_threshold_left_average = <500>;
-			adc_threshold_3pole_detect = <3331>;
-			adc_threshold_4pole_detect = <3332>;
+			adc_threshold_3pole_detect = <3269>;
+			adc_threshold_4pole_detect = <3270>;
 			irq_threshold_buttont = <4>;
 			voltage_headmicbias = <3000000>;
 			nbuttons = <4>;
@@ -365,7 +364,7 @@
 			};
 			headset_buttons_down {
 				adc_min = <1200>;
-				adc_max =<2780>;
+				adc_max =<3000>;
 				code = <114>;
 				type = <0>;
 			};
@@ -444,6 +443,7 @@
 			cm36672p,default_trim = <3>;
 		};
 	};
+
 	i2c_gpio10: i2c_gpio@5 {
 		compatible = "i2c-gpio";
 		#address-cells = <1>;
@@ -464,81 +464,6 @@
 		};
 	};
 	
-	smartglow {
-		compatible = "smartglow";		
-	};
-	
-	i2c_gpio11: i2c_gpio@6 {
-		compatible = "i2c-gpio";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		gpios = <&d_gpio_gpio 86 0	/* sda */
-				&d_gpio_gpio 87 0 >;	/* scl */
-		i2c-gpio,delay-us = <10>;	/* ~100 kHz */
-		i2c-gpio,timeout-ms = <0>;
-
-		an30259a@33 {
-			compatible = "an30259a,smartglow";
-			reg = <0x33>;
-			an30259a,led-num = <1>;
-			an30259a,iMax = <0x0>;
-			an30259a,clk_mode = <0x4>;
-			an30259a,led-name = "led_1";
-			an30259a,rgb-name = "led_r1", "led_g1", "led_b1";
-			an30259a,brightness = <0 0 0>;
-			an30259a,maxbrightness = <255 255 255>;
-			an30259a,default_current = <0xFF 0xFF 0xFF>;
-			an30259a,lowpower_current = <0xf 0xf 0xf>;
-			an30259a,offset_current = <0x0 0x0 0x0>;
-			an30259a,flags = <0x0 0x0 0x0>;
-		};
-		an30259a@30 {
-			compatible = "an30259a,smartglow";
-			reg = <0x30>;
-			an30259a,led-num = <2>;
-			an30259a,iMax = <0x0>;
-			an30259a,clk_mode = <0x6>;
-			an30259a,led-name = "led_2";
-			an30259a,rgb-name = "led_r2", "led_g2", "led_b2";
-			an30259a,brightness = <0 0 0>;
-			an30259a,maxbrightness = <255 255 255>;
-			an30259a,default_current = <0xFF 0xFF 0xFF>;
-			an30259a,lowpower_current = <0xf 0xf 0xf>;
-			an30259a,offset_current = <0x0 0x0 0x0>;
-			an30259a,flags = <0x0 0x0 0x0>;
-		};
-		an30259a@31 {
-			compatible = "an30259a,smartglow";
-			reg = <0x31>;
-			an30259a,led-num = <3>;
-			an30259a,iMax = <0x0>;
-			an30259a,clk_mode = <0x4>;
-			an30259a,led-name = "led_3";
-			an30259a,rgb-name = "led_r3", "led_g3", "led_b3";
-			an30259a,brightness = <0 0 0>;
-			an30259a,maxbrightness = <255 255 255>;
-			an30259a,default_current = <0xFF 0xFF 0xFF>;
-			an30259a,lowpower_current = <0xf 0xf 0xf>;
-			an30259a,offset_current = <0x0 0x0 0x0>;
-			an30259a,flags = <0x0 0x0 0x0>;
-		};
-		an30259a@32 {
-			compatible = "an30259a,smartglow";
-			reg = <0x32>;
-			an30259a,led-num = <4>;
-			an30259a,iMax = <0x0>;
-			an30259a,clk_mode = <0x4>;
-			an30259a,led-name = "led_4";
-			an30259a,rgb-name = "led_r4", "led_g4", "led_b4";
-			an30259a,brightness = <0 0 0>;
-			an30259a,maxbrightness = <255 255 255>;
-			an30259a,default_current = <0xFF 0xFF 0xFF>;
-			an30259a,lowpower_current = <0xf 0xf 0xf>;
-			an30259a,offset_current = <0x0 0x0 0x0>;
-			an30259a,flags = <0x0 0x0 0x0>;
-		};
-	};
-
 	sec_thermistor {
 		compatible = "sec,thermistor";
 	};
@@ -783,10 +708,9 @@
 			pn547,firm-gpio = <&d_gpio_gpio 89 0x00>;
 			pn547,ven-gpio = <&d_gpio_gpio 85 0x00>;
 			pn547,irq-gpio = <&d_gpio_gpio 51 0x00>;
-			pn547,clk_req-gpio =  <&d_gpio_gpio 96 0x00>;
 			pn547,ldo_flag = <0>;
 			pn547,gpio_power;
-			pn547,pvdd_en = <&d_gpio_gpio 87 0x00>;
+			pn547,pvdd_en = <&d_gpio_gpio 88 0x00>;
 		};
 	};
 

@@ -28,6 +28,10 @@
 #include <linux/tracepoint.h>
 #include "internal.h"
 
+#ifdef CONFIG_SPRD_IODEBUG_BDI
+extern void iodebug_bdi_save_reason(enum wb_reason reason);
+extern void iodebug_bdi_save_pages(unsigned char *dev_name, long nr_page);
+#endif
 /*
  * 4MB minimal write chunk size
  */
@@ -99,6 +103,10 @@ static void bdi_queue_work(struct backing_dev_info *bdi,
 			   struct wb_writeback_work *work)
 {
 	trace_writeback_queue(bdi, work);
+
+#ifdef CONFIG_SPRD_IODEBUG_BDI
+	iodebug_bdi_save_reason(work->reason);
+#endif
 
 	spin_lock_bh(&bdi->wb_lock);
 	if (!test_bit(BDI_registered, &bdi->state)) {
@@ -982,6 +990,9 @@ static long wb_check_old_data_flush(struct bdi_writeback *wb)
 			.reason		= WB_REASON_PERIODIC,
 		};
 
+#ifdef CONFIG_SPRD_IODEBUG_BDI
+		iodebug_bdi_save_reason(WB_REASON_PERIODIC);
+#endif
 		return wb_writeback(wb, &work);
 	}
 
@@ -1055,6 +1066,9 @@ void bdi_writeback_workfn(struct work_struct *work)
 		do {
 			pages_written = wb_do_writeback(wb, 0);
 			trace_writeback_pages_written(pages_written);
+#ifdef CONFIG_SPRD_IODEBUG_BDI
+			iodebug_bdi_save_pages(dev_name(bdi->dev), pages_written);
+#endif
 		} while (!list_empty(&bdi->work_list));
 	} else {
 		/*
@@ -1065,6 +1079,10 @@ void bdi_writeback_workfn(struct work_struct *work)
 		pages_written = writeback_inodes_wb(&bdi->wb, 1024,
 						    WB_REASON_FORKER_THREAD);
 		trace_writeback_pages_written(pages_written);
+#ifdef CONFIG_SPRD_IODEBUG_BDI
+		iodebug_bdi_save_pages(dev_name(bdi->dev), pages_written);
+		iodebug_bdi_save_reason(WB_REASON_FORKER_THREAD);
+#endif
 	}
 
 	if (!list_empty(&bdi->work_list))

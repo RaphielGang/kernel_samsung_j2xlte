@@ -26,6 +26,10 @@
 #include <asm/hardware/cache-l2x0.h>
 #include <linux/kbuild.h>
 
+#ifdef CONFIG_ARCH_SCX35L
+#include <soc/sprd/iomap.h>
+#endif
+
 /*
  * Make sure that the compiler and target are compatible.
  */
@@ -194,5 +198,6 @@ int main(void)
 #endif
   DEFINE(KVM_VTTBR,		offsetof(struct kvm, arch.vttbr));
 #endif
+
   return 0; 
 }

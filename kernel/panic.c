@@ -63,6 +63,10 @@ void __weak panic_smp_self_stop(void)
 		cpu_relax();
 }
 
+#ifdef CONFIG_SPRD_SYSDUMP
+	extern void sysdump_enter(int enter_id, const char *reason, struct pt_regs *regs);
+#endif
+
 /**
  *	panic - halt the system
  *	@fmt: The text string to print
@@ -71,6 +75,9 @@ void __weak panic_smp_self_stop(void)
  *
  *	This function never returns.
  */
+#if defined(CONFIG_SEC_DEBUG) || defined(CONFIG_SEC_LOG64)
+void sec_debug_panic_message(int en);
+#endif
 void panic(const char *fmt, ...)
 {
 	static DEFINE_SPINLOCK(panic_lock);
@@ -105,7 +112,14 @@ void panic(const char *fmt, ...)
 	va_start(args, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
+#if defined(CONFIG_SEC_DEBUG) || defined(CONFIG_SEC_LOG64)
+	sec_debug_panic_message(0);
+#endif
 	printk(KERN_EMERG "Kernel panic - not syncing: %s\n",buf);
+#if defined(CONFIG_SEC_DEBUG) || defined(CONFIG_SEC_LOG64)
+	sec_debug_panic_message(1);
+#endif
+	print_modules();
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	/*
 	 * Avoid nested stack-dumping if a panic occurs during oops processing
@@ -114,6 +128,9 @@ void panic(const char *fmt, ...)
 		dump_stack();
 #endif
 
+#ifdef CONFIG_SPRD_SYSDUMP
+	sysdump_enter(0,buf,NULL);
+#endif
 	/*
 	 * If we have crashed and we have a crash kernel loaded let it handle
 	 * everything else.

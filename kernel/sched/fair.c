@@ -41,6 +41,7 @@
 #endif /* CONFIG_HMP_FREQUENCY_INVARIANT_SCALE */
 #ifdef CONFIG_SCHED_HMP
 #include <linux/cpuidle.h>
+#include <linux/kernel_stat.h>
 #endif
 
 #include "sched.h"
@@ -1234,7 +1235,35 @@ struct hmp_global_attr {
 	ssize_t (*to_sysfs_text)(char *buf, int buf_size);
 };
 
+/* FIXME. default sched boost is enabled */
+#define CONIFG_SCHED_BOOST
+
+#ifdef CONIFG_SCHED_BOOST
+#define BOOT_TIMEOUT	(50*HZ)
+static unsigned long boot_done;
+#ifdef CONFIG_SCHED_HMP_LITTLE_PACKING
+static struct delayed_work cl_work;
+static u64 prev_cpu_wall[CONFIG_NR_CPUS] = {0};
+static u64 prev_cpu_idle[CONFIG_NR_CPUS] = {0};
+/* default check cpu load sampling rate, ms */
+static unsigned int sampling_rate = 50;
+static unsigned int high_threshold = 70;
+static unsigned int mid_threshold = 50;
+static unsigned int low_threshold = 40;
+
+#define mod(n, div) ((n) % (div))
+#define MAX_ARRAY_SIZE  (10)
+static unsigned int cpu_load[MAX_ARRAY_SIZE] = {0};
+static unsigned int window_index = 0;
+static unsigned int window_size = 3;
+#endif
+#endif
+
+#ifdef CONIFG_SCHED_BOOST
+#define HMP_DATA_SYSFS_MAX 20
+#else
 #define HMP_DATA_SYSFS_MAX 8
+#endif
 
 struct hmp_data_struct {
 #ifdef CONFIG_HMP_FREQUENCY_INVARIANT_SCALE
@@ -3810,8 +3839,13 @@ static struct sched_entity *hmp_get_lightest_task(
  * hmp_packing_enabled: runtime control over pack/spread
  * hmp_full_threshold: Consider a CPU with this much unweighted load full
  */
+#ifdef CONIFG_SCHED_BOOST
+unsigned int hmp_up_threshold = 0;
+unsigned int hmp_down_threshold = 0;
+#else
 unsigned int hmp_up_threshold = 700;
-unsigned int hmp_down_threshold = 512;
+unsigned int hmp_down_threshold = 200;
+#endif
 #ifdef CONFIG_SCHED_HMP_PRIO_FILTER
 unsigned int hmp_up_prio = NICE_TO_PRIO(CONFIG_SCHED_HMP_PRIO_FILTER_VAL);
 #endif
@@ -3842,6 +3876,26 @@ unsigned int hmp_next_down_threshold = 4096;
  */
 unsigned int hmp_packing_enabled = 1;
 unsigned int hmp_full_threshold = 650;
+
+#endif
+
+#ifdef CONIFG_SCHED_BOOST
+/* default boost pulse time, us */
+#define DEF_BOOSTPULSE_DURATION		(500 * USEC_PER_MSEC)
+unsigned int hmp_up_threshold_raw = 700;
+unsigned int hmp_down_threshold_raw = 200;
+unsigned int boost_hmp_up_threshold = 0;
+unsigned int boost_hmp_down_threshold = 0;
+unsigned int hmp_full_threshold_raw = 650;
+unsigned int boost_active_hmp_full_threshold = 100;
+unsigned int boost_inactive_hmp_full_threshold = 350;
+int boost_val = 0;
+int boostpulse_val = 0;
+/* Duration of a boot pulse in usecs */
+int boostpulse_duration_val = DEF_BOOSTPULSE_DURATION;
+bool boosted = false;
+struct timer_list boostpulse_timer;
+struct timer_list boot_timer;
 #endif
 
 static unsigned int hmp_up_migration(int cpu, int *target_cpu, struct sched_entity *se);
@@ -4116,6 +4170,7 @@ static int hmp_theshold_from_sysfs(int value)
 		return -1;
 	return value;
 }
+
 #if defined(CONFIG_SCHED_HMP_LITTLE_PACKING) || \
 		defined(CONFIG_HMP_FREQUENCY_INVARIANT_SCALE)
 /* toggle control is only 0,1 off/on */
@@ -4129,6 +4184,74 @@ static int hmp_toggle_from_sysfs(int value)
 #ifdef CONFIG_SCHED_HMP_LITTLE_PACKING
 /* packing value must be non-negative */
 static int hmp_packing_from_sysfs(int value)
+{
+	if (value < 0)
+		return -1;
+	return value;
+}
+#ifdef CONIFG_SCHED_BOOST
+static int hmp_packing_save_from_sysfs(int value)
+{
+	if (value < 0)
+		return -1;
+	hmp_full_threshold_raw = value;
+	return value;
+}
+#endif
+#endif
+
+#ifdef CONIFG_SCHED_BOOST
+static int hmp_up_theshold_from_sysfs(int value)
+{
+	if (value > 1024)
+		return -1;
+	hmp_up_threshold_raw = value;
+	return value;
+}
+
+static int hmp_down_theshold_from_sysfs(int value)
+{
+	if (value > 1024)
+		return -1;
+	hmp_down_threshold_raw = value;
+	return value;
+}
+
+static int hmp_boost_from_sysfs(int value)
+{
+	if (value < 0 || value > 1)
+		return -1;
+
+	if (time_after(jiffies, boot_done)) {
+		del_timer_sync(&boostpulse_timer);
+		if (value) {
+			boosted = true;
+			hmp_down_threshold = boost_hmp_down_threshold;
+			hmp_up_threshold = boost_hmp_up_threshold;
+		} else {
+			hmp_up_threshold = hmp_up_threshold_raw;
+			hmp_down_threshold = hmp_down_threshold_raw;
+			boosted = false;
+		}
+	}
+
+	return value;
+}
+
+static int hmp_boostpulse_from_sysfs(int value)
+{
+	if (time_after(jiffies, boot_done) && !boosted) {
+		del_timer_sync(&boostpulse_timer);
+		hmp_down_threshold = boost_hmp_down_threshold;
+		hmp_up_threshold = boost_hmp_up_threshold;
+		boostpulse_timer.expires = jiffies + usecs_to_jiffies(
+			(unsigned long)boostpulse_duration_val);
+		add_timer(&boostpulse_timer);
+	}
+	return value;
+}
+
+static int hmp_boostpulse_duration_from_sysfs(int value)
 {
 	if (value < 0)
 		return -1;
@@ -4177,13 +4300,21 @@ static int hmp_attr_init(void)
 	hmp_attr_add("up_threshold",
 		&hmp_up_threshold,
 		NULL,
+#ifdef CONIFG_SCHED_BOOST
+		hmp_up_theshold_from_sysfs,
+#else
 		hmp_theshold_from_sysfs,
+#endif
 		NULL,
 		0);
 	hmp_attr_add("down_threshold",
 		&hmp_down_threshold,
 		NULL,
+#ifdef CONIFG_SCHED_BOOST
+		hmp_down_theshold_from_sysfs,
+#else
 		hmp_theshold_from_sysfs,
+#endif
 		NULL,
 		0);
 #ifdef CONFIG_HMP_VARIABLE_SCALE
@@ -4218,7 +4349,87 @@ static int hmp_attr_init(void)
 	hmp_attr_add("packing_limit",
 		&hmp_full_threshold,
 		NULL,
+#ifdef CONIFG_SCHED_BOOST
+		hmp_packing_save_from_sysfs,
+#else
 		hmp_packing_from_sysfs,
+#endif
+		NULL,
+		0);
+#ifdef CONIFG_SCHED_BOOST
+	hmp_attr_add("high_threshold",
+		&high_threshold,
+		NULL,
+		hmp_packing_from_sysfs,
+		NULL,
+		0);
+	hmp_attr_add("mid_threshold",
+		&mid_threshold,
+		NULL,
+		hmp_packing_from_sysfs,
+		NULL,
+		0);
+	hmp_attr_add("low_threshold",
+		&low_threshold,
+		NULL,
+		hmp_packing_from_sysfs,
+		NULL,
+		0);
+	hmp_attr_add("sampling_rate",
+		&sampling_rate,
+		NULL,
+		hmp_packing_from_sysfs,
+		NULL,
+		0);
+	hmp_attr_add("boost_active_packing_limit",
+		&boost_active_hmp_full_threshold,
+		NULL,
+		hmp_packing_from_sysfs,
+		NULL,
+		0);
+	hmp_attr_add("boost_inactive_packing_limit",
+		&boost_inactive_hmp_full_threshold,
+		NULL,
+		hmp_packing_from_sysfs,
+		NULL,
+		0);
+	hmp_attr_add("packing_window_size",
+		&window_size,
+		NULL,
+		hmp_packing_from_sysfs,
+		NULL,
+		0);
+#endif
+#endif
+#ifdef CONIFG_SCHED_BOOST
+	hmp_attr_add("boost",
+		&boost_val,
+		NULL,
+		hmp_boost_from_sysfs,
+		NULL,
+		0);
+	hmp_attr_add("boostpulse",
+		&boostpulse_val,
+		NULL,
+		hmp_boostpulse_from_sysfs,
+		NULL,
+		0);
+	hmp_attr_add("boostpulse_duration",
+		&boostpulse_duration_val,
+		NULL,
+		hmp_boostpulse_duration_from_sysfs,
+		NULL,
+		0);
+	hmp_attr_add("boost_up_threshold",
+		&boost_hmp_up_threshold,
+		NULL,
+		hmp_theshold_from_sysfs,
+		NULL,
+		0);
+	hmp_attr_add("boost_down_threshold",
+		&boost_hmp_down_threshold,
+		NULL,
+		hmp_theshold_from_sysfs,
 		NULL,
 		0);
 #endif
@@ -7890,8 +8101,191 @@ __init void init_sched_fair_class(void)
 	hmp_cpu_mask_setup();
 #endif
 #endif /* SMP */
-
 }
+
+#ifdef CONFIG_SCHED_HMP
+#ifdef CONIFG_SCHED_BOOST
+#ifdef CONFIG_SCHED_HMP_LITTLE_PACKING
+static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
+{
+	u64 idle_time;
+	u64 cur_wall_time;
+	u64 busy_time;
+
+	cur_wall_time = jiffies64_to_cputime64(get_jiffies_64());
+
+	busy_time = kcpustat_cpu(cpu).cpustat[CPUTIME_USER];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SYSTEM];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_IRQ];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SOFTIRQ];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_STEAL];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
+
+	idle_time = cur_wall_time - busy_time;
+	if (wall)
+		*wall = cputime_to_usecs(cur_wall_time);
+
+	return cputime_to_usecs(idle_time);
+}
+
+static u64 sched_get_cpu_idle_time(unsigned int cpu, u64 *wall, int io_busy)
+{
+	u64 idle_time = get_cpu_idle_time_us(cpu, io_busy ? wall : NULL);
+
+	if (idle_time == -1ULL)
+		return get_cpu_idle_time_jiffy(cpu, wall);
+	else if (!io_busy)
+		idle_time += get_cpu_iowait_time_us(cpu, wall);
+
+	return idle_time;
+}
+
+static unsigned int cal_cpu_load(unsigned int load)
+{
+	unsigned int count;
+	unsigned int scale;
+	unsigned int sum_scale = 0;
+	unsigned int sum_load = 0;
+	unsigned int window_tail = 0, window_head = 0;
+
+	cpu_load[window_index] = load;
+	window_index++;
+	window_index = mod(window_index, MAX_ARRAY_SIZE);
+
+	if (!window_index)
+		window_tail = MAX_ARRAY_SIZE - 1;
+	else
+		window_tail = window_index - 1;
+
+	window_head = mod(MAX_ARRAY_SIZE + window_tail - window_size + 1,
+			MAX_ARRAY_SIZE);
+	for (scale = 1, count = 0; count < window_size;
+			scale += scale, count++) {
+		pr_debug("window cpu_load[%d]: %d, scale: %d\n",
+				window_head,
+				cpu_load[window_head], scale);
+		sum_load += (cpu_load[window_head] * scale);
+		sum_scale += scale;
+		window_head++;
+		window_head = mod(window_head, MAX_ARRAY_SIZE);
+	}
+
+	return sum_load / sum_scale;
+}
+
+static void check_load_work(struct work_struct *work)
+{
+	int cpu;
+	unsigned int max_load = 0;
+	unsigned int cpu_load[CONFIG_NR_CPUS] = {0};
+	int online_num = 0;
+	int mid_num = 0;
+
+	if (time_before(jiffies, boot_done))
+		goto re_arm;
+
+	/* Get Absolute Load */
+	for_each_online_cpu(cpu) {
+		u64 cur_wall_time, cur_idle_time;
+		unsigned int idle_time, wall_time;
+		int io_busy = 1;
+
+		if(!hmp_cpu_is_slowest(cpu))
+			continue;
+
+		cur_idle_time = sched_get_cpu_idle_time(cpu, &cur_wall_time, io_busy);
+
+		wall_time = (unsigned int)
+			(cur_wall_time - prev_cpu_wall[cpu]);
+		prev_cpu_wall[cpu] = cur_wall_time;
+
+		idle_time = (unsigned int)
+			(cur_idle_time - prev_cpu_idle[cpu]);
+		prev_cpu_idle[cpu] = cur_idle_time;
+
+		if (unlikely(!wall_time || wall_time < idle_time))
+			continue;
+
+		cpu_load[cpu] = 100 * (wall_time - idle_time) / wall_time;
+
+		if (cpu_load[cpu] > max_load)
+			max_load = cpu_load[cpu];
+
+		if (cpu_load[cpu] > mid_threshold)
+			mid_num++;
+
+		online_num++;
+
+		pr_debug("per cpu_load[%d]:%d\n", cpu, cpu_load[cpu]);
+	}
+	pr_debug("-------sched max cpu_load:%d ------\n", max_load);
+
+	/* packing disable check */
+	if (max_load > high_threshold && mid_num >= online_num/2) {
+		hmp_packing_enabled = 0;
+	} else if (max_load > mid_threshold) {
+		if (!hmp_packing_enabled)
+			hmp_packing_enabled = 1;
+		if(mid_num < 2) {
+			if(hmp_full_threshold !=
+				boost_inactive_hmp_full_threshold)
+				hmp_full_threshold =
+					boost_inactive_hmp_full_threshold;
+		} else if (hmp_full_threshold != boost_active_hmp_full_threshold)
+			hmp_full_threshold = boost_active_hmp_full_threshold;
+	}
+
+	/* packing enable check */
+	max_load = cal_cpu_load(max_load);
+	pr_debug("-------sched cal cpu_load:%d ------\n", max_load);
+	if (max_load < low_threshold) {
+		if (!hmp_packing_enabled)
+			hmp_packing_enabled = 1;
+		if (hmp_full_threshold != hmp_full_threshold_raw)
+			hmp_full_threshold = hmp_full_threshold_raw;
+	} else if (max_load < mid_threshold) {
+		if (!hmp_packing_enabled)
+			hmp_packing_enabled = 1;
+		if (hmp_full_threshold != boost_inactive_hmp_full_threshold)
+			hmp_full_threshold = boost_inactive_hmp_full_threshold;
+	}
+
+	pr_debug("-------cpu_load enable:%d, threshold:%d ------\n",
+			hmp_packing_enabled, hmp_full_threshold);
+re_arm:
+	/* re_queue delay work on cpu0 */
+	mod_delayed_work_on(0, system_wq, &cl_work, msecs_to_jiffies(sampling_rate));
+}
+#endif
+static void restore_boost_timer(unsigned long unused)
+{
+	if (!boosted) {
+		hmp_up_threshold = hmp_up_threshold_raw;
+		hmp_down_threshold = hmp_down_threshold_raw;
+	}
+}
+
+static int __init sched_boost_init(void)
+{
+	boot_done = jiffies + BOOT_TIMEOUT;
+	init_timer(&boostpulse_timer);
+	boostpulse_timer.function = restore_boost_timer;
+	init_timer(&boot_timer);
+	boot_timer.function = restore_boost_timer;
+	boot_timer.expires = boot_done;
+	add_timer(&boot_timer);
+
+#ifdef CONFIG_SCHED_HMP_LITTLE_PACKING
+	INIT_DEFERRABLE_WORK(&cl_work, check_load_work);
+	/* queue delay work on cpu0 */
+	mod_delayed_work_on(0, system_wq, &cl_work, msecs_to_jiffies(sampling_rate));
+#endif
+	return 0;
+}
+
+module_init(sched_boost_init);
+#endif
+#endif
 
 #ifdef CONFIG_HMP_FREQUENCY_INVARIANT_SCALE
 static u32 cpufreq_calc_scale(u32 min, u32 max, u32 curr)

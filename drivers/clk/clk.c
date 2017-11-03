@@ -713,9 +713,13 @@ void __clk_unprepare(struct clk *clk)
  */
 void clk_unprepare(struct clk *clk)
 {
+#ifdef CONFIG_SC_FPGA
+	return;
+#else
 	clk_prepare_lock();
 	__clk_unprepare(clk);
 	clk_prepare_unlock();
+#endif
 }
 EXPORT_SYMBOL_GPL(clk_unprepare);
 
@@ -760,16 +764,18 @@ int __clk_prepare(struct clk *clk)
 int clk_prepare(struct clk *clk)
 {
 	int ret;
-
+#ifdef CONFIG_SC_FPGA
+	return 0;
+#else
 	clk_prepare_lock();
 	ret = __clk_prepare(clk);
 	clk_prepare_unlock();
-
+#endif
 	return ret;
 }
 EXPORT_SYMBOL_GPL(clk_prepare);
 
-static void __clk_disable(struct clk *clk)
+void __clk_disable(struct clk *clk)
 {
 	if (!clk)
 		return;
@@ -805,13 +811,17 @@ void clk_disable(struct clk *clk)
 {
 	unsigned long flags;
 
+#ifdef CONFIG_SC_FPGA
+	return ;
+#else
 	flags = clk_enable_lock();
 	__clk_disable(clk);
 	clk_enable_unlock(flags);
+#endif
 }
 EXPORT_SYMBOL_GPL(clk_disable);
 
-static int __clk_enable(struct clk *clk)
+int __clk_enable(struct clk *clk)
 {
 	int ret = 0;
 
@@ -857,11 +867,13 @@ int clk_enable(struct clk *clk)
 {
 	unsigned long flags;
 	int ret;
-
+#ifdef CONFIG_SC_FPGA
+	return 0;
+#else
 	flags = clk_enable_lock();
 	ret = __clk_enable(clk);
 	clk_enable_unlock(flags);
-
+#endif
 	return ret;
 }
 EXPORT_SYMBOL_GPL(clk_enable);
@@ -1182,8 +1194,15 @@ static void clk_change_rate(struct clk *clk)
 	if (clk->notifier_count && old_rate != clk->rate)
 		__clk_notify(clk, POST_RATE_CHANGE, old_rate, clk->rate);
 
-	hlist_for_each_entry(child, &clk->children, child_node)
+	hlist_for_each_entry(child, &clk->children, child_node){
+#ifdef CONFIG_CPLL_1024M
+		if (child->parent != NULL && child->parent->parent != NULL)
+			if (!strcmp(__clk_get_name(child->parent->parent), "clk_cpll"))
+				if(!strcmp(__clk_get_name(child),"clk_dcam") || !strcmp(__clk_get_name(child), "clk_gpu") || !strcmp(__clk_get_name(child), "clk_isp"))
+					return;
+#endif
 		clk_change_rate(child);
+	}
 }
 
 /**
@@ -1212,6 +1231,7 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 	struct clk *top, *fail_clk;
 	int ret = 0;
 
+#ifndef CONFIG_SC_FPGA
 	/* prevent racing with updates to the clock topology */
 	clk_prepare_lock();
 
@@ -1246,7 +1266,7 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 
 out:
 	clk_prepare_unlock();
-
+#endif
 	return ret;
 }
 EXPORT_SYMBOL_GPL(clk_set_rate);
@@ -1462,6 +1482,10 @@ int clk_set_parent(struct clk *clk, struct clk *parent)
 	u8 p_index = 0;
 	unsigned long p_rate = 0;
 
+#ifdef CONFIG_SC_FPGA
+	return 0;
+#else
+
 	if (!clk || !clk->ops)
 		return -EINVAL;
 
@@ -1512,7 +1536,7 @@ int clk_set_parent(struct clk *clk, struct clk *parent)
 
 out:
 	clk_prepare_unlock();
-
+#endif
 	return ret;
 }
 EXPORT_SYMBOL_GPL(clk_set_parent);
@@ -1630,7 +1654,8 @@ int __clk_init(struct device *dev, struct clk *clk)
 	 * this clock
 	 */
 	hlist_for_each_entry_safe(orphan, tmp2, &clk_orphan_list, child_node) {
-		if (orphan->ops->get_parent) {
+		if (orphan->num_parents && orphan->ops->get_parent) {
+			printk("orphan %s \n", orphan->name);
 			i = orphan->ops->get_parent(orphan->hw);
 			if (!strcmp(clk->name, orphan->parent_names[i]))
 				__clk_reparent(orphan, clk);

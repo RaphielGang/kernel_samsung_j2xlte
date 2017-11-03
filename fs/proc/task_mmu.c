@@ -12,6 +12,10 @@
 #include <linux/swap.h>
 #include <linux/swapops.h>
 
+#ifdef CONFIG_SPRD_DEBUG_MORE_SMAPS_INFO
+#include <linux/mm_inline.h>
+#endif
+
 #include <asm/elf.h>
 #include <asm/uaccess.h>
 #include <asm/tlbflush.h>
@@ -298,6 +302,19 @@ static int do_maps_open(struct inode *inode, struct file *file,
 		if (!ret) {
 			struct seq_file *m = file->private_data;
 			m->private = priv;
+#ifdef CONFIG_SPRD_DEBUG_MORE_SMAPS_INFO
+			priv->rss = 0;
+			priv->pss = 0;
+			priv->uss = 0;
+			priv->filecache_pss = 0;
+			priv->anonymous_pss = 0;
+			priv->filecache_uss = 0;
+			priv->anonymous_uss = 0;
+			priv->swap = 0;
+			priv->pswap = 0;
+			priv->anonymous_uswap = 0;
+			priv->is_last = false;
+#endif
 		} else {
 			kfree(priv);
 		}
@@ -477,9 +494,9 @@ const struct file_operations proc_tid_maps_operations = {
  * PSS_SHIFT) would be the real byte count.
  *
  * A shift of 12 before division means (assuming 4K page size):
- * 	- 1M 3-user-pages add up to 8KB errors;
- * 	- supports mapcount up to 2^24, or 16M;
- * 	- supports PSS up to 2^52 bytes, or 4PB.
+ *	- 1M 3-user-pages add up to 8KB errors;
+ *	- supports mapcount up to 2^24, or 16M;
+ *	- supports PSS up to 2^52 bytes, or 4PB.
  */
 #define PSS_SHIFT 12
 
@@ -496,9 +513,20 @@ struct mem_size_stats {
 	unsigned long anonymous_thp;
 	unsigned long swap;
 	unsigned long nonlinear;
+#ifdef CONFIG_SPRD_DEBUG_MORE_SMAPS_INFO
+	unsigned long filecache;
+	unsigned long shared_filecache;
+	unsigned long private_filecache;
+	unsigned long shared_anonymous;
+	unsigned long private_anonymous;
+	u64 pss_filecache;
+	u64 pss_anonymous;
+	u64 uswap;
+#endif
 	u64 pss;
-};
+	u64 pswap;
 
+};
 
 static void smaps_pte_entry(pte_t ptent, unsigned long addr,
 		unsigned long ptent_size, struct mm_walk *walk)
@@ -514,9 +542,23 @@ static void smaps_pte_entry(pte_t ptent, unsigned long addr,
 	} else if (is_swap_pte(ptent)) {
 		swp_entry_t swpent = pte_to_swp_entry(ptent);
 
-		if (!non_swap_entry(swpent))
+		if (!non_swap_entry(swpent)) {
+			int mapcount;
+
 			mss->swap += ptent_size;
-		else if (is_migration_entry(swpent))
+			mapcount = swp_swapcount(swpent);
+			if (mapcount >= 2) {
+				u64 pss_delta = (u64)ptent_size << PSS_SHIFT;
+
+				do_div(pss_delta, mapcount);
+				mss->pswap += pss_delta;
+			} else {
+#ifdef CONFIG_SPRD_DEBUG_MORE_SMAPS_INFO
+				mss->uswap += ptent_size << PSS_SHIFT;
+#endif
+				mss->pswap += (u64)ptent_size << PSS_SHIFT;
+			}
+		} else if (is_migration_entry(swpent))
 			page = migration_entry_to_page(swpent);
 	} else if (pte_file(ptent)) {
 		if (pte_to_pgoff(ptent) != pgoff)
@@ -528,6 +570,10 @@ static void smaps_pte_entry(pte_t ptent, unsigned long addr,
 
 	if (PageAnon(page))
 		mss->anonymous += ptent_size;
+#ifdef CONFIG_SPRD_DEBUG_MORE_SMAPS_INFO
+	else if(page_is_file_cache(page))
+		mss->filecache += ptent_size;
+#endif
 
 	if (page->index != pgoff)
 		mss->nonlinear += ptent_size;
@@ -543,12 +589,32 @@ static void smaps_pte_entry(pte_t ptent, unsigned long addr,
 		else
 			mss->shared_clean += ptent_size;
 		mss->pss += (ptent_size << PSS_SHIFT) / mapcount;
+#ifdef CONFIG_SPRD_DEBUG_MORE_SMAPS_INFO
+		if (PageAnon(page)) {
+			mss->shared_anonymous += ptent_size;
+			mss->pss_anonymous += (ptent_size << PSS_SHIFT) / mapcount;
+		}
+		else if(page_is_file_cache(page)) {
+			mss->shared_filecache += ptent_size;
+			mss->pss_filecache += (ptent_size << PSS_SHIFT) / mapcount;
+		}
+#endif
 	} else {
 		if (pte_dirty(ptent) || PageDirty(page))
 			mss->private_dirty += ptent_size;
 		else
 			mss->private_clean += ptent_size;
 		mss->pss += (ptent_size << PSS_SHIFT);
+#ifdef CONFIG_SPRD_DEBUG_MORE_SMAPS_INFO
+		if (PageAnon(page)) {
+			mss->private_anonymous += ptent_size;
+			mss->pss_anonymous += (ptent_size << PSS_SHIFT);
+		}
+		else if(page_is_file_cache(page)) {
+			mss->private_filecache += ptent_size;
+			mss->pss_filecache += (ptent_size << PSS_SHIFT);
+		}
+#endif
 	}
 }
 
@@ -652,7 +718,142 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 		walk_page_range(vma->vm_start, vma->vm_end, &smaps_walk);
 
 	show_map_vma(m, vma, is_pid);
+#ifdef CONFIG_SPRD_DEBUG_MORE_SMAPS_INFO
+	seq_printf(m,
+		   "Size:             %8lu kB\n"
+		   "Rss:              %8lu kB\n"
+		   "Pss:              %8lu kB\n"
+		   "Uss:              %8lu kB\n"
+		   "Shared_Clean:     %8lu kB\n"
+		   "Shared_Dirty:     %8lu kB\n"
+		   "Private_Clean:    %8lu kB\n"
+		   "Private_Dirty:    %8lu kB\n"
+		   "Referenced:       %8lu kB\n"
+		   "Filecache:        %8lu kB\n"
+		   "Pss_Filecache:    %8lu kB\n"
+		   "Shared_Filecache: %8lu kB\n"
+		   "Private_Filecache:%8lu kB\n"
+		   "Anonymous:        %8lu kB\n"
+		   "Pss_Anonymous:    %8lu kB\n"
+		   "Shared_Anonymous: %8lu kB\n"
+		   "Private_Anonymous:%8lu kB\n"
+		   "AnonHugePages:    %8lu kB\n"
+		   "Swap:             %8lu kB\n"
+		   "SwapPss:          %8lu kB\n"
+		   "USwap:            %8lu kB\n"
+		   "KernelPageSize:   %8lu kB\n"
+		   "MMUPageSize:      %8lu kB\n"
+		   "Locked:           %8lu kB\n",
+		   (vma->vm_end - vma->vm_start) >> 10,
+		   mss.resident >> 10,
+		   (unsigned long)(mss.pss >> (10 + PSS_SHIFT)),
+		   (mss.private_clean + mss.private_dirty) >> 10,
+		   mss.shared_clean  >> 10,
+		   mss.shared_dirty  >> 10,
+		   mss.private_clean >> 10,
+		   mss.private_dirty >> 10,
+		   mss.referenced >> 10,
+		   mss.filecache >> 10,
+		   (unsigned long)(mss.pss_filecache >> (10 + PSS_SHIFT)),
+		   mss.shared_filecache >> 10,
+		   mss.private_filecache >> 10,
+		   mss.anonymous >> 10,
+		   (unsigned long)(mss.pss_anonymous >> (10 + PSS_SHIFT)),
+		   mss.shared_anonymous >> 10,
+		   mss.private_anonymous >> 10,
+		   mss.anonymous_thp >> 10,
+		   mss.swap >> 10,
+		   (unsigned long)(mss.pswap >> (10 + PSS_SHIFT)),
+		   (unsigned long)(mss.uswap >> (10 + PSS_SHIFT)),
+		   vma_kernel_pagesize(vma) >> 10,
+		   vma_mmu_pagesize(vma) >> 10,
+		   (vma->vm_flags & VM_LOCKED) ?
+			(unsigned long)(mss.pss >> (10 + PSS_SHIFT)) : 0);
 
+	if (vma->vm_flags & VM_NONLINEAR)
+		seq_printf(m, "Nonlinear:      %8lu kB\n",
+				mss.nonlinear >> 10);
+
+	show_smap_vma_flags(m, vma);
+
+	if (vma_get_anon_name(vma)) {
+		seq_puts(m, "Name:           ");
+		seq_print_vma_name(m, vma);
+		seq_putc(m, '\n');
+	}
+
+	if (m->count < m->size) {  /* vma is copied successfully */
+		priv->rss += mss.resident;
+		priv->pss += mss.pss;
+		priv->uss += mss.private_clean + mss.private_dirty;
+		priv->filecache_rss += mss.filecache;
+		priv->anonymous_rss += mss.anonymous;
+		priv->filecache_pss += mss.pss_filecache;
+		priv->anonymous_pss += mss.pss_anonymous;
+		priv->filecache_uss += mss.private_filecache;
+		priv->anonymous_uss += mss.private_anonymous;
+		priv->swap += mss.swap;
+		priv->pswap += mss.pswap;
+		priv->anonymous_uswap += mss.uswap;
+
+		if ((vma == priv->tail_vma) && (priv->is_last == false)) {
+			/* This seq_printf will increases m->count*/
+			seq_printf(m,
+				"Rss_All:                %8lu kB\n"
+				"Pss_All:                %8lu kB\n"
+				"Uss_All:                %8lu kB\n"
+				"Rss_Filecache_All:      %8lu kB\n"
+				"Rss_Anonymous_All:      %8lu kB\n"
+				"Pss_Filecache_All:      %8lu kB\n"
+				"Pss_Anonymous_All:      %8lu kB\n"
+				"Uss_Filecache_All:      %8lu kB\n"
+				"Uss_Anonymous_All:      %8lu kB\n"
+				"Swap_All:               %8lu kB\n"
+				"Pswap_All:              %8lu kB\n"
+				"USwap_All:              %8lu kB\n",
+				(unsigned long)(priv->rss >> 10),
+				(unsigned long)(priv->pss >> (10 + PSS_SHIFT)),
+				(unsigned long)(priv->uss >> 10),
+				(unsigned long)(priv->filecache_rss >> 10),
+				(unsigned long)(priv->anonymous_rss >> 10),
+				(unsigned long)(priv->filecache_pss
+					>> (10 + PSS_SHIFT)),
+				(unsigned long)(priv->anonymous_pss
+					>> (10 + PSS_SHIFT)),
+				(unsigned long)(priv->filecache_uss >> 10),
+				(unsigned long)(priv->anonymous_uss >> 10),
+				(unsigned long)(priv->swap >> 10),
+				(unsigned long)(priv->pswap
+					>> (10 + PSS_SHIFT)),
+				(unsigned long)(priv->anonymous_uswap
+					>> (10 + PSS_SHIFT)));
+
+			/* vma is still copied successfully */
+			if (m->count < m->size) {
+				priv->is_last = true;
+			} else {
+				priv->rss -= mss.resident;
+				priv->pss -= mss.pss;
+				priv->uss -= mss.private_clean
+					+ mss.private_dirty;
+				priv->filecache_rss -= mss.filecache;
+				priv->anonymous_rss -= mss.anonymous;
+				priv->filecache_pss -= mss.pss_filecache;
+				priv->anonymous_pss -= mss.pss_anonymous;
+				priv->filecache_uss -= mss.private_filecache;
+				priv->anonymous_uss -= mss.private_anonymous;
+				priv->swap -= mss.swap;
+				priv->pswap -= mss.pswap;
+				priv->anonymous_uswap -= mss.uswap;
+			}
+		}
+	}
+
+	if (m->count < m->size) {  /* vma is copied successfully */
+		m->version = (vma != get_gate_vma(task->mm))
+			? vma->vm_start : 0;
+	}
+#else
 	seq_printf(m,
 		   "Size:           %8lu kB\n"
 		   "Rss:            %8lu kB\n"
@@ -665,6 +866,7 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 		   "Anonymous:      %8lu kB\n"
 		   "AnonHugePages:  %8lu kB\n"
 		   "Swap:           %8lu kB\n"
+		   "SwapPss:        %8lu kB\n"
 		   "KernelPageSize: %8lu kB\n"
 		   "MMUPageSize:    %8lu kB\n"
 		   "Locked:         %8lu kB\n",
@@ -679,6 +881,7 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 		   mss.anonymous >> 10,
 		   mss.anonymous_thp >> 10,
 		   mss.swap >> 10,
+		   (unsigned long)(mss.pswap >> (10 + PSS_SHIFT)),
 		   vma_kernel_pagesize(vma) >> 10,
 		   vma_mmu_pagesize(vma) >> 10,
 		   (vma->vm_flags & VM_LOCKED) ?
@@ -699,6 +902,7 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 	if (m->count < m->size)  /* vma is copied successfully */
 		m->version = (vma != get_gate_vma(task->mm))
 			? vma->vm_start : 0;
+#endif
 	return 0;
 }
 
@@ -741,6 +945,76 @@ const struct file_operations proc_pid_smaps_operations = {
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= seq_release_private,
+};
+
+static int proc_pid_smaps_simple_show(struct seq_file *m, void *v)
+{
+	struct pid *pid = (struct pid *)m->private;
+	struct task_struct *task;
+	struct mm_struct *mm;
+	struct vm_area_struct *vma;
+	struct mem_size_stats mss_total;
+	struct mem_size_stats mss;
+	int ret = 0;
+
+	struct mm_walk smaps_walk = {
+		.pmd_entry = smaps_pte_range,
+		.private = &mss,
+	};
+
+	task = get_pid_task(pid, PIDTYPE_PID);
+	if (!task) {
+		ret = -1;
+		goto error_task;
+	}
+
+	mm = mm_access(task, PTRACE_MODE_READ);
+	if (!mm || IS_ERR(mm)) {
+		ret = -2;
+		goto error_mm;
+	}
+
+	memset(&mss_total, 0, sizeof mss_total);
+	down_read(&mm->mmap_sem);
+	vma = mm->mmap;
+	while (vma) {
+		memset(&mss, 0, sizeof mss);
+		mss.vma = vma;
+		smaps_walk.mm = vma->vm_mm;
+
+		if (vma->vm_mm && !is_vm_hugetlb_page(vma)) {
+			walk_page_range(vma->vm_start, vma->vm_end, &smaps_walk);
+			mss_total.pss += mss.pss;
+			mss_total.pswap += mss.pswap;
+		}
+		vma = vma->vm_next;
+	}
+	up_read(&mm->mmap_sem);
+	mmput(mm);
+
+	seq_printf(m,
+		   "Pss:            %8lu kB\n"
+		   "SwapPss:        %8lu kB\n",
+		   (unsigned long)(mss_total.pss >> (10 + PSS_SHIFT)),
+		   (unsigned long)(mss_total.pswap>> (10 + PSS_SHIFT)));
+
+error_mm:
+	put_task_struct(task);
+
+error_task:
+	return 0;
+}
+
+static int proc_pid_smaps_simple_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, proc_pid_smaps_simple_show, proc_pid(inode));
+}
+
+const struct file_operations proc_pid_smaps_simple_operations = {
+	.open		= proc_pid_smaps_simple_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
 };
 
 const struct file_operations proc_tid_smaps_operations = {
@@ -1172,9 +1446,17 @@ out:
 	return ret;
 }
 
+static int pagemap_open(struct inode *inode, struct file *file)
+{
+	/* do not disclose physical addresses: attack vector */
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+	return 0;
+}
 const struct file_operations proc_pagemap_operations = {
 	.llseek		= mem_lseek, /* borrow this */
 	.read		= pagemap_read,
+	.open		= pagemap_open,	
 };
 #endif /* CONFIG_PROC_PAGE_MONITOR */
 

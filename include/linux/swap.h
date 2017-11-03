@@ -228,6 +228,18 @@ extern unsigned long dirty_balance_reserve;
 extern unsigned long nr_free_buffer_pages(void);
 extern unsigned long nr_free_pagecache_pages(void);
 
+#if defined CONFIG_MEM_PAGE_ORDER_TRACE || defined CONFIG_POMEMR_RECLAIM
+#define MIN_ORDER_RECLAIM 1
+#define MAX_ORDER_RECLAIM 5
+#endif
+
+#ifdef CONFIG_MEM_PAGE_ORDER_TRACE
+extern unsigned int page_order_trace[MAX_ORDER];
+extern int sysctl_mem_porder_trace;
+extern int sysctl_mem_porder_trace_handler(struct ctl_table *table, int write,
+			void __user *buffer, size_t *length, loff_t *ppos);
+#endif /* CONFIG_MEM_PAGE_ORDER_TRACE */
+
 /* Definition of global_page_state not available yet */
 #define nr_free_pages() global_page_state(NR_FREE_PAGES)
 
@@ -265,6 +277,11 @@ static inline void lru_cache_add_file(struct page *page)
 /* linux/mm/vmscan.c */
 extern unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 					gfp_t gfp_mask, nodemask_t *mask);
+                    
+#if defined CONFIG_POMEMR_RECLAIM
+extern unsigned long try_to_free_pages_alloc_fast(unsigned long nr_to_reclaim, int reclaim_order, enum lru_list lru);
+#endif /* CONFIG_POMEMR_RECLAIM */
+                    
 extern int __isolate_lru_page(struct page *page, isolate_mode_t mode);
 extern unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *mem,
 						  gfp_t gfp_mask, bool noswap);
@@ -276,6 +293,12 @@ extern unsigned long shrink_all_memory(unsigned long nr_pages);
 extern int vm_swappiness;
 extern int remove_mapping(struct address_space *mapping, struct page *page);
 extern unsigned long vm_total_pages;
+
+#ifdef CONFIG_POMEMR_RECLAIM
+extern int freepage_min_order;
+extern int freepage_sysctl_handler(struct ctl_table *table, int write,
+ 			 void __user *buffer, size_t *length, loff_t *ppos);
+#endif /* CONFIG_POMEMR_RECLAIM */
 
 #ifdef CONFIG_NUMA
 extern int zone_reclaim_mode;
@@ -389,6 +412,7 @@ extern unsigned int count_swap_pages(int, int);
 extern sector_t map_swap_page(struct page *, struct block_device **);
 extern sector_t swapdev_block(int, pgoff_t);
 extern int page_swapcount(struct page *);
+extern int swp_swapcount(swp_entry_t entry);
 extern struct swap_info_struct *page_swap_info(struct page *);
 extern int reuse_swap_page(struct page *);
 extern int try_to_free_swap(struct page *);
@@ -485,6 +509,11 @@ static inline void delete_from_swap_cache(struct page *page)
 }
 
 static inline int page_swapcount(struct page *page)
+{
+	return 0;
+}
+
+static inline int swp_swapcount(swp_entry_t entry)
 {
 	return 0;
 }

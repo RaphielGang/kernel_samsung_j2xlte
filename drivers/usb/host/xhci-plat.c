@@ -12,19 +12,39 @@
  */
 
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 
 #include "xhci.h"
 
+#define SYNOPSIS_DWC3_VENDOR	0x5533
+
 static void xhci_plat_quirks(struct device *dev, struct xhci_hcd *xhci)
 {
+	struct xhci_plat_data *pdata = dev->platform_data;
+
 	/*
 	 * As of now platform drivers don't provide MSI support so we ensure
 	 * here that the generic code does not try to make a pci_dev from our
 	 * dev struct in order to setup MSI
 	 */
 	xhci->quirks |= XHCI_PLAT;
+
+	if (!pdata)
+		return;
+
+	if (pdata->vendor == SYNOPSIS_DWC3_VENDOR && pdata->revision < 0x230A)
+		xhci->quirks |= XHCI_PORTSC_DELAY;
+
+	if (pdata->vendor == SYNOPSIS_DWC3_VENDOR && pdata->revision <= 0x250A)
+		xhci->quirks |= XHCI_TR_DEQ_ERR_QUIRK;
+
+	if (pdata->vendor == SYNOPSIS_DWC3_VENDOR && pdata->revision == 0x250A)
+		xhci->quirks |= XHCI_RESET_DELAY;
+
+	if (pdata->vendor == SYNOPSIS_DWC3_VENDOR && pdata->revision <= 0x250A)
+		xhci->quirks |= XHCI_RESET_RS_ON_RESUME_QUIRK;
 }
 
 /* called during probe() after chip reset completes */
@@ -32,6 +52,24 @@ static int xhci_plat_setup(struct usb_hcd *hcd)
 {
 	return xhci_gen_setup(hcd, xhci_plat_quirks);
 }
+
+static void (*notify_event)(struct usb_hcd *, unsigned);
+
+void xhci_set_notifier(void (*notify)(struct usb_hcd *, unsigned))
+{
+	notify_event = notify;
+}
+EXPORT_SYMBOL(xhci_set_notifier);
+
+int xhci_notify_event(struct usb_hcd *hcd, unsigned event)
+{
+	int ret = 0;
+
+	if (notify_event)
+		notify_event(hcd, event);
+	return ret;
+}
+EXPORT_SYMBOL(xhci_notify_event);
 
 static const struct hc_driver xhci_plat_xhci_driver = {
 	.description =		"xhci-hcd",
@@ -82,6 +120,8 @@ static const struct hc_driver xhci_plat_xhci_driver = {
 	.bus_resume =		xhci_bus_resume,
 };
 
+static struct xhci_hcd *__xhci;
+
 static int xhci_plat_probe(struct platform_device *pdev)
 {
 	const struct hc_driver	*driver;
@@ -125,6 +165,13 @@ static int xhci_plat_probe(struct platform_device *pdev)
 		goto release_mem_region;
 	}
 
+	if (pdev->dev.parent)
+		pm_runtime_resume(pdev->dev.parent);
+
+	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
+	pm_runtime_get_sync(&pdev->dev);
+
 	ret = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (ret)
 		goto unmap_registers;
@@ -149,8 +196,17 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	if (ret)
 		goto put_usb3_hcd;
 
-	return 0;
+	pm_runtime_put(&pdev->dev);
 
+	/*
+	 * Release resources after the intialization is finished.
+	 */
+	hcd->driver->stop(hcd);
+
+	xhci_notify_event(hcd, 0);
+	__xhci = xhci;
+
+	return 0;
 put_usb3_hcd:
 	usb_put_hcd(xhci->shared_hcd);
 
@@ -174,6 +230,8 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct usb_hcd	*hcd = platform_get_drvdata(dev);
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 
+	pm_runtime_disable(&dev->dev);
+
 	usb_remove_hcd(xhci->shared_hcd);
 	usb_put_hcd(xhci->shared_hcd);
 
@@ -186,11 +244,45 @@ static int xhci_plat_remove(struct platform_device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_RUNTIME
+static int xhci_plat_runtime_suspend(struct device *dev)
+{
+	struct usb_hcd *hcd = dev_get_drvdata(dev);
+	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
+
+	if (!xhci)
+		return 0;
+
+	dev_dbg(dev, "xhci-plat runtime suspend\n");
+
+	return xhci_suspend(xhci);
+}
+
+static int xhci_plat_runtime_resume(struct device *dev)
+{
+	struct usb_hcd *hcd = dev_get_drvdata(dev);
+	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
+
+	if (!xhci)
+		return 0;
+
+	dev_dbg(dev, "xhci-plat runtime resume\n");
+
+	return xhci_resume(xhci, false);
+}
+#endif
+
+static const struct dev_pm_ops xhci_plat_pm_ops = {
+	SET_RUNTIME_PM_OPS(xhci_plat_runtime_suspend, xhci_plat_runtime_resume,
+			   NULL)
+};
+
 static struct platform_driver usb_xhci_driver = {
 	.probe	= xhci_plat_probe,
 	.remove	= xhci_plat_remove,
 	.driver	= {
 		.name = "xhci-hcd",
+		.pm = &xhci_plat_pm_ops,
 	},
 };
 MODULE_ALIAS("platform:xhci-hcd");

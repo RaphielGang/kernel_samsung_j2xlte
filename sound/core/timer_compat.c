@@ -21,6 +21,7 @@
 /* This file included from timer.c */
 
 #include <linux/compat.h>
+#include <sound/sprd_memcpy_ops.h>
 
 struct snd_timer_info32 {
 	u32 flags;
@@ -52,7 +53,7 @@ static int snd_timer_user_info_compat(struct file *file,
 	strlcpy(info.id, t->id, sizeof(info.id));
 	strlcpy(info.name, t->name, sizeof(info.name));
 	info.resolution = t->hw.resolution;
-	if (copy_to_user(_info, &info, sizeof(*_info)))
+	if (unalign_copy_to_user(_info, &info, sizeof(*_info)))
 		return -EFAULT;
 	return 0;
 }
@@ -83,7 +84,7 @@ static int snd_timer_user_status_compat(struct file *file,
 	spin_lock_irq(&tu->qlock);
 	status.queue = tu->qused;
 	spin_unlock_irq(&tu->qlock);
-	if (copy_to_user(_status, &status, sizeof(status)))
+	if (unalign_copy_to_user(_status, &status, sizeof(status)))
 		return -EFAULT;
 	return 0;
 }

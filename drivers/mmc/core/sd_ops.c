@@ -390,3 +390,158 @@ int mmc_app_sd_status(struct mmc_card *card, void *ssr)
 
 	return 0;
 }
+
+static int send_stop(struct mmc_card *card)
+{
+	struct mmc_command cmd = {0};
+	int err;
+
+	cmd.opcode = MMC_STOP_TRANSMISSION;
+	cmd.flags = MMC_RSP_SPI_R1B | MMC_RSP_R1B | MMC_CMD_AC;
+	err = mmc_wait_for_cmd(card->host, &cmd, 5);
+	return err;
+}
+extern int mmc_send_status(struct mmc_card *card, u32 *status);
+
+static int mmc_sd_test_data(struct mmc_card *card, void *data_buf)
+{
+	struct mmc_request mrq = {NULL};
+	struct mmc_command cmd = {0};
+	struct mmc_data data = {0};
+	struct scatterlist sg;
+
+	mrq.cmd = &cmd;
+	mrq.data = &data;
+
+	cmd.opcode = MMC_READ_SINGLE_BLOCK;
+	cmd.arg = 0;
+	cmd.flags =  MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;;
+
+	data.blksz = 512;
+	data.blocks = 1;
+	data.flags = MMC_DATA_READ;
+	data.sg = &sg;
+	data.sg_len = 1;
+
+	sg_init_one(&sg, data_buf, 512);
+	mmc_set_data_timeout(&data, card);
+	mmc_wait_for_req(card->host, &mrq);
+
+	if (cmd.error){
+		printk("mmc read single block cmd err\n");
+		return cmd.error;
+	}
+	if (data.error){
+		printk("mmc read single block data err\n");
+		return data.error;
+	}
+	printk("mmc read single block success\n");
+
+	cmd.opcode = MMC_WRITE_BLOCK;
+	cmd.arg = 0;
+	cmd.flags =  MMC_RSP_R1 | MMC_CMD_ADTC;;
+
+	data.blksz = 512;
+	data.blocks = 1;
+	data.flags = MMC_DATA_WRITE;
+	data.sg = &sg;
+	data.sg_len = 1;
+	mmc_send_status(card, NULL);
+
+	sg_init_one(&sg, data_buf, 512);
+	mmc_set_data_timeout(&data, card);
+	mmc_wait_for_req(card->host, &mrq);
+
+	if (cmd.error){
+		printk("mmc write single block cmd err\n");
+		return cmd.error;
+	}
+	if (data.error){
+		printk("mmc write single block data err\n");
+		return data.error;
+	}
+	mmc_send_status(card, NULL);
+	printk("mmc write single block success\n");
+
+
+	return 0;
+}
+
+static int mmc_sd_test_data_mult(struct mmc_card *card, void *data_buf)
+{
+	struct mmc_request mrq = {NULL};
+	struct mmc_command cmd = {0};
+	struct mmc_data data = {0};
+	struct scatterlist sg;
+
+	mrq.cmd = &cmd;
+	mrq.data = &data;
+
+	cmd.opcode = MMC_READ_MULTIPLE_BLOCK;
+	cmd.arg = 0;
+	cmd.flags =  MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;;
+
+	data.blksz = 512;
+	data.blocks = 2;
+	data.flags = MMC_DATA_READ;
+	data.sg = &sg;
+	data.sg_len = 1;
+
+	sg_init_one(&sg, data_buf, 1024);
+	mmc_set_data_timeout(&data, card);
+	mmc_wait_for_req(card->host, &mrq);
+
+	if (cmd.error){
+		printk("mmc read mult block cmd err\n");
+		return cmd.error;
+	}
+	if (data.error){
+		printk("mmc read mult block data err\n");
+		return data.error;
+	}
+	printk("mmc read mult block success\n");
+
+	cmd.opcode = MMC_WRITE_MULTIPLE_BLOCK;
+	cmd.arg = 0;
+	cmd.flags =  MMC_RSP_R1 | MMC_CMD_ADTC;;
+
+	data.blksz = 512;
+	data.blocks = 2;
+	data.flags = MMC_DATA_WRITE;
+	data.sg = &sg;
+	data.sg_len = 1;
+
+	send_stop(card);
+
+	sg_init_one(&sg, data_buf, 1024);
+	mmc_set_data_timeout(&data, card);
+	mmc_wait_for_req(card->host, &mrq);
+
+	if (cmd.error){
+		printk("mmc write mult block cmd err\n");
+		return cmd.error;
+	}
+	if (data.error){
+		printk("mmc write mult block data err\n");
+		return data.error;
+	}
+	send_stop(card);
+	printk("mmc write mult block success\n");
+
+	return 0;
+}
+
+int mmc_sd_try_test(struct mmc_card *card)
+{
+	void *data_buf = NULL;
+	unsigned int ret;
+
+	data_buf = kmalloc(1024, GFP_KERNEL);
+	if (data_buf == NULL)
+		return -ENOMEM;
+	ret = mmc_sd_test_data_mult(card, data_buf);
+	if(!ret)
+		ret = mmc_sd_test_data(card, data_buf);
+	kfree(data_buf);
+	return ret;
+}

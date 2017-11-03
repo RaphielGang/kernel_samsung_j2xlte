@@ -72,6 +72,10 @@ static inline bool compaction_restarting(struct zone *zone, int order)
 		zone->compact_considered >= 1UL << zone->compact_defer_shift;
 }
 
+#ifdef CONFIG_POMEMR_RECLAIM
+unsigned long try_to_compact_pages_order(int porder);
+#endif
+
 #else
 static inline unsigned long try_to_compact_pages(struct zonelist *zonelist,
 			int order, gfp_t gfp_mask, nodemask_t *nodemask,

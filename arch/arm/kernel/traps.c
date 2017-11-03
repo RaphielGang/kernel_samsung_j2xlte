@@ -287,10 +287,18 @@ static unsigned long oops_begin(void)
 	return flags;
 }
 
+#ifdef CONFIG_SPRD_SYSDUMP /* TODO: jianjun.he */
+	extern void sysdump_enter(int enter_id, const char *reason, struct pt_regs *regs);
+#endif
 static void oops_end(unsigned long flags, struct pt_regs *regs, int signr)
 {
+#ifdef CONFIG_SPRD_SYSDUMP /* TODO: jianjun.he */
+	sysdump_enter(1, "oops", regs);
+#endif
+#ifndef CONFIG_SEC_DEBUG
 	if (regs && kexec_should_crash(current))
 		crash_kexec(regs);
+#endif
 
 	bust_spinlocks(0);
 	die_owner = -1;
@@ -804,6 +812,13 @@ void abort(void)
 	panic("Oops failed to kill thread");
 }
 EXPORT_SYMBOL(abort);
+
+#if defined(CONFIG_SEC_DEBUG)
+void cp_abort(void *debug_info)
+{
+	panic("CP Crash : %s", debug_info);
+}
+#endif
 
 void __init trap_init(void)
 {

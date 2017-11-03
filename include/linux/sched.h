@@ -102,6 +102,9 @@ extern unsigned long nr_running(void);
 extern unsigned long nr_iowait(void);
 extern unsigned long nr_iowait_cpu(int cpu);
 extern unsigned long this_cpu_load(void);
+#ifdef CONFIG_RUNTIME_COMPCACHE
+extern unsigned long this_cpu_loadx(int i);
+#endif /* CONFIG_RUNTIME_COMPCACHE */
 
 
 extern void calc_global_load(unsigned long ticks);
@@ -1447,6 +1450,11 @@ struct task_struct {
 #if defined(CONFIG_BCACHE) || defined(CONFIG_BCACHE_MODULE)
 	unsigned int	sequential_io;
 	unsigned int	sequential_io_avg;
+#endif
+#ifdef CONFIG_SPRD_IODEBUG_IOSCHEDULE
+	struct page *lock_on_page;
+	struct buffer_head *lock_on_buffer;
+	struct timer_list *lock_timer;
 #endif
 };
 

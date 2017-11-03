@@ -386,13 +386,19 @@ static int __init cpu_psci_cpu_prepare(unsigned int cpu)
 
 	return 0;
 }
-
+extern void smp_send_cpuup(int cpu);
 static int cpu_psci_cpu_boot(unsigned int cpu)
 {
+	static int acpu[8]={0};
 	int err = psci_ops.cpu_on(cpu_logical_map(cpu), __pa(secondary_entry));
 	if (err)
 		pr_err("failed to boot CPU%d (%d)\n", cpu, err);
-
+	else{
+		if(acpu[cpu])
+			smp_send_cpuup(cpu);
+		else
+			acpu[cpu] = 1;
+	}
 	return err;
 }
 
@@ -457,6 +463,32 @@ static int cpu_psci_cpu_suspend(unsigned long index)
 {
 	struct psci_power_state *state = __get_cpu_var(psci_power_state);
 
+	struct psci_power_state state_temp;
+	if (state)
+		return psci_ops.cpu_suspend(state[index], virt_to_phys(cpu_resume));
+	switch(index){
+	case 2:
+		state_temp.id = 2;
+		state_temp.type = PSCI_POWER_STATE_TYPE_POWER_DOWN;
+		state_temp.affinity_level = 0;
+		break;
+	case 3:
+		state_temp.id = 3;
+		state_temp.type = PSCI_POWER_STATE_TYPE_POWER_DOWN;
+		state_temp.affinity_level = 1;
+		break;
+	case 4:
+		state_temp.id = 4;
+		state_temp.type = PSCI_POWER_STATE_TYPE_POWER_DOWN;
+		state_temp.affinity_level = 1;
+		break;
+	case 5:
+		state_temp.id = 5;
+		state_temp.type = PSCI_POWER_STATE_TYPE_POWER_DOWN;
+		state_temp.affinity_level = 1;
+		break;
+	}
+	return psci_ops.cpu_suspend(state_temp, virt_to_phys(cpu_resume));
 	if (!state)
 		return -EOPNOTSUPP;
 

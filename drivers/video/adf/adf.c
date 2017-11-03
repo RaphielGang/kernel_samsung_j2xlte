@@ -36,25 +36,22 @@
 #define CREATE_TRACE_POINTS
 #include "adf_trace.h"
 
-#define ADF_SHORT_FENCE_TIMEOUT (1 * MSEC_PER_SEC)
-#define ADF_LONG_FENCE_TIMEOUT (10 * MSEC_PER_SEC)
+#define ADF_FENCE_TIMEOUT (3 * MSEC_PER_SEC)
 
 static DEFINE_IDR(adf_devices);
 
-static void adf_fence_wait(struct adf_device *dev, struct sync_fence *fence)
+void adf_fence_wait(struct adf_device *dev, struct sync_fence *fence)
 {
 	/* sync_fence_wait() dumps debug information on timeout.  Experience
 	   has shown that if the pipeline gets stuck, a short timeout followed
 	   by a longer one provides useful information for debugging. */
-	int err = sync_fence_wait(fence, ADF_SHORT_FENCE_TIMEOUT);
+
+	/* modify the fence wait strategy .  only wait one time(3s). */
+	int err = sync_fence_wait(fence, ADF_FENCE_TIMEOUT);
 	if (err >= 0)
 		return;
 
-	if (err == -ETIME)
-		err = sync_fence_wait(fence, ADF_LONG_FENCE_TIMEOUT);
-
-	if (err < 0)
-		dev_warn(&dev->base.dev, "error waiting on fence: %d\n", err);
+	dev_warn(&dev->base.dev, "error waiting on fence: %d\n", err);
 }
 
 void adf_buffer_cleanup(struct adf_buffer *buf)
@@ -119,11 +116,19 @@ static void adf_post_work_func(struct kthread_work *work)
 			container_of(work, struct adf_device, post_work);
 	struct adf_pending_post *post, *next;
 	struct list_head saved_list;
+	bool need_wake_up_pending_wq = false;
 
 	mutex_lock(&dev->post_lock);
 	memcpy(&saved_list, &dev->post_list, sizeof(saved_list));
 	list_replace_init(&dev->post_list, &saved_list);
+	if (dev->n_pending_post_cmd > ADF_MAX_PENDING_POST_CMD)
+		need_wake_up_pending_wq = true;
+
+	dev->n_pending_post_cmd = 0;
 	mutex_unlock(&dev->post_lock);
+	if (need_wake_up_pending_wq)
+		wake_up(&dev->pending_wq);
+
 
 	list_for_each_entry_safe(post, next, &saved_list, head) {
 		int i;
@@ -556,6 +561,8 @@ int adf_device_init(struct adf_device *dev, struct device *parent,
 	idr_init(&dev->interfaces);
 	mutex_init(&dev->client_lock);
 	INIT_LIST_HEAD(&dev->post_list);
+	dev->n_pending_post_cmd = 0;
+	init_waitqueue_head(&dev->pending_wq);
 	mutex_init(&dev->post_lock);
 	init_kthread_worker(&dev->post_worker);
 	INIT_LIST_HEAD(&dev->attached);

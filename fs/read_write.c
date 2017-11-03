@@ -22,6 +22,10 @@
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 
+#ifdef CONFIG_SPRD_IODEBUG_VFS
+extern int iodebug_save_vfs_io(int rw, size_t count, struct file *filp, char fuse_flag, unsigned long io_jiffies);
+#endif
+
 typedef ssize_t (*io_fn_t)(struct file *, char __user *, size_t, loff_t *);
 typedef ssize_t (*iov_fn_t)(struct kiocb *, const struct iovec *,
 		unsigned long, loff_t);
@@ -354,6 +358,10 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
 	ssize_t ret;
 
+#ifdef CONFIG_SPRD_IODEBUG_VFS
+	unsigned long jiffies_begin = jiffies;
+#endif
+
 	if (!(file->f_mode & FMODE_READ))
 		return -EBADF;
 	if (!file->f_op || (!file->f_op->read && !file->f_op->aio_read))
@@ -374,7 +382,9 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 		}
 		inc_syscr(current);
 	}
-
+#ifdef CONFIG_SPRD_IODEBUG_VFS
+	iodebug_save_vfs_io(0, count, file, 0, (jiffies-jiffies_begin));
+#endif
 	return ret;
 }
 
@@ -431,6 +441,10 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 {
 	ssize_t ret;
 
+#ifdef CONFIG_SPRD_IODEBUG_VFS
+	unsigned long jiffies_begin = jiffies;
+#endif
+
 	if (!(file->f_mode & FMODE_WRITE))
 		return -EBADF;
 	if (!file->f_op || (!file->f_op->write && !file->f_op->aio_write))
@@ -454,6 +468,9 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 		file_end_write(file);
 	}
 
+#ifdef CONFIG_SPRD_IODEBUG_VFS
+	iodebug_save_vfs_io(1, count, file, 0, (jiffies-jiffies_begin));
+#endif
 	return ret;
 }
 

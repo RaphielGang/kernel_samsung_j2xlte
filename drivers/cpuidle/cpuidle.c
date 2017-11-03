@@ -87,6 +87,10 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 
 	time_end = ktime_get();
 
+	if (drv->states[index].flags & CPUIDLE_FLAG_TIMER_STOP)
+		clockevents_notify(CLOCK_EVT_NOTIFY_BROADCAST_EXIT,
+				   &dev->cpu);
+
 	local_irq_enable();
 
 	diff = ktime_to_us(ktime_sub(time_end, time_start));
@@ -155,10 +159,6 @@ int cpuidle_idle_call(void)
 							    next_state);
 	else
 		entered_state = cpuidle_enter_state(dev, drv, next_state);
-
-	if (drv->states[next_state].flags & CPUIDLE_FLAG_TIMER_STOP)
-		clockevents_notify(CLOCK_EVT_NOTIFY_BROADCAST_EXIT,
-				   &dev->cpu);
 
 	trace_cpu_idle_rcuidle(PWR_EVENT_EXIT, dev->cpu);
 

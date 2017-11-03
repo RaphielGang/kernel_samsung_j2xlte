@@ -30,13 +30,21 @@
 
 static inline pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr)
 {
+#ifndef CONFIG_SPRD_PAGERECORDER
 	return (pmd_t *)get_zeroed_page(GFP_KERNEL | __GFP_REPEAT);
+#else
+	return (pmd_t *)get_zeroed_page_nopagedebug(GFP_KERNEL | __GFP_REPEAT);
+#endif
 }
 
 static inline void pmd_free(struct mm_struct *mm, pmd_t *pmd)
 {
 	BUG_ON((unsigned long)pmd & (PAGE_SIZE-1));
+#ifndef CONFIG_SPRD_PAGERECORDER
 	free_page((unsigned long)pmd);
+#else
+	free_page_nopagedebug((unsigned long)pmd);
+#endif
 }
 
 static inline void pud_populate(struct mm_struct *mm, pud_t *pud, pmd_t *pmd)
@@ -54,7 +62,11 @@ extern void pgd_free(struct mm_struct *mm, pgd_t *pgd);
 static inline pte_t *
 pte_alloc_one_kernel(struct mm_struct *mm, unsigned long addr)
 {
+#ifndef CONFIG_SPRD_PAGERECORDER
 	return (pte_t *)__get_free_page(PGALLOC_GFP);
+#else
+	return (pte_t *)__get_free_page_nopagedebug(PGALLOC_GFP);
+#endif
 }
 
 static inline pgtable_t
@@ -62,7 +74,11 @@ pte_alloc_one(struct mm_struct *mm, unsigned long addr)
 {
 	struct page *pte;
 
+#ifndef CONFIG_SPRD_PAGERECORDER
 	pte = alloc_pages(PGALLOC_GFP, 0);
+#else
+	pte = alloc_pages_nopagedebug(PGALLOC_GFP, 0);
+#endif
 	if (pte)
 		pgtable_page_ctor(pte);
 
@@ -75,13 +91,21 @@ pte_alloc_one(struct mm_struct *mm, unsigned long addr)
 static inline void pte_free_kernel(struct mm_struct *mm, pte_t *pte)
 {
 	if (pte)
+#ifndef CONFIG_SPRD_PAGERECORDER
 		free_page((unsigned long)pte);
+#else
+		free_page_nopagedebug((unsigned long)pte);
+#endif
 }
 
 static inline void pte_free(struct mm_struct *mm, pgtable_t pte)
 {
 	pgtable_page_dtor(pte);
+#ifndef CONFIG_SPRD_PAGERECORDER
 	__free_page(pte);
+#else
+	__free_page_nopagedebug(pte);
+#endif
 }
 
 static inline void __pmd_populate(pmd_t *pmdp, phys_addr_t pte,

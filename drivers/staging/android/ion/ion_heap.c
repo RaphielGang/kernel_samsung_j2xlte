@@ -232,6 +232,17 @@ static int ion_heap_deferred_free(void *data)
 
 		spin_lock(&heap->free_lock);
 		if (list_empty(&heap->free_list)) {
+			/*
+			 *  Sprd Change
+			 *  Add a protect to avoid the thread waked up allways
+			 *  when free_list_size is overwrited by abnormal operation.
+			 * */
+			if (heap->free_list_size > 0)
+			{
+			    printk(KERN_INFO "ion buffer free_list_size:%u is in abnormal state, so do reset\n",
+					    (unsigned int)heap->free_list_size);
+			    heap->free_list_size = 0;
+			}
 			spin_unlock(&heap->free_lock);
 			continue;
 		}
@@ -256,12 +267,12 @@ int ion_heap_init_deferred_free(struct ion_heap *heap)
 	init_waitqueue_head(&heap->waitqueue);
 	heap->task = kthread_run(ion_heap_deferred_free, heap,
 				 "%s", heap->name);
-	sched_setscheduler(heap->task, SCHED_IDLE, &param);
 	if (IS_ERR(heap->task)) {
 		pr_err("%s: creating thread for deferred free failed\n",
 		       __func__);
 		return PTR_RET(heap->task);
 	}
+	sched_setscheduler(heap->task, SCHED_IDLE, &param);
 	return 0;
 }
 
@@ -321,7 +332,7 @@ struct ion_heap *ion_heap_create(struct ion_platform_heap *heap_data)
 		heap = ion_chunk_heap_create(heap_data);
 		break;
 	case ION_HEAP_TYPE_DMA:
-		heap = ion_cma_heap_create(heap_data);
+		heap = ion_cma_heap_create(heap_data, NULL);
 		break;
 	default:
 		pr_err("%s: Invalid heap type %d\n", __func__,

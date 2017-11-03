@@ -13,6 +13,7 @@ if BLOCK
 source "fs/ext2/Kconfig"
 source "fs/ext3/Kconfig"
 source "fs/ext4/Kconfig"
+source "fs/sdcardfs/Kconfig"
 
 config FS_XIP
 # execute in place
@@ -92,6 +93,7 @@ if BLOCK
 menu "DOS/FAT/NT Filesystems"
 
 source "fs/fat/Kconfig"
+source "fs/exfat/Kconfig"
 source "fs/ntfs/Kconfig"
 
 endmenu
@@ -267,5 +269,17 @@ endif # NETWORK_FILESYSTEMS
 
 source "fs/nls/Kconfig"
 source "fs/dlm/Kconfig"
+source "fs/iodebug/Kconfig"
 
+config SPRD_METADATA_BUFFER_RECLAIM
+	bool "delay reclaim the metadata's buffer."
+	depends on BLOCK
+	help
+	  For IO performance, delay reclaim the metadata's buffer.
+	  Under direct reclaim context,it will be reclaim as usual.
+
+config SPRD_LAZY_SHRINK_SBCACHE
+	bool "lazy shrink the dentry and inode caches."
+	help
+	  For IO performance, delay reclaim the dentry and inode caches.
 endmenu

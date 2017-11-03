@@ -663,7 +663,9 @@ static int audio_pcm_open(struct snd_pcm_substream *substream)
 
 	runtime->private_data = audio;
 	runtime->hw = audio_hw_info;
+#ifdef CONFIG_SOUND
 	snd_pcm_limit_hw_rates(runtime);
+#endif
 	runtime->hw.channels_max = 2;
 
 	audio->substream = substream;
@@ -692,9 +694,12 @@ static int audio_pcm_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	if (channels != 2)
 		return -EINVAL;
-
+#ifdef CONFIG_SOUND
 	return snd_pcm_lib_alloc_vmalloc_buffer(substream,
 		params_buffer_bytes(params));
+#else
+	return 1;
+#endif
 }
 
 static int audio_pcm_hw_free(struct snd_pcm_substream *substream)

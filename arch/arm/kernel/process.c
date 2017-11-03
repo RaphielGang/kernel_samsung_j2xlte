@@ -235,16 +235,6 @@ __setup("reboot=", reboot_setup);
  */
 void machine_shutdown(void)
 {
-#ifdef CONFIG_SMP
-	/*
-	 * Disable preemption so we're guaranteed to
-	 * run to power off or reboot and prevent
-	 * the possibility of switching to another
-	 * thread that might wind up blocking on
-	 * one of the stopped CPUs.
-	 */
-	preempt_disable();
-#endif
 	disable_nonboot_cpus();
 }
 
@@ -255,6 +245,7 @@ void machine_shutdown(void)
  */
 void machine_halt(void)
 {
+	local_irq_disable();
 	smp_send_stop();
 
 	local_irq_disable();
@@ -269,6 +260,7 @@ void machine_halt(void)
  */
 void machine_power_off(void)
 {
+	local_irq_disable();
 	smp_send_stop();
 
 	if (pm_power_off)
@@ -288,6 +280,7 @@ void machine_power_off(void)
  */
 void machine_restart(char *cmd)
 {
+	local_irq_disable();
 	smp_send_stop();
 
 	/* Flush the console to make sure all the relevant messages make it
@@ -376,15 +369,24 @@ static void show_extra_register_data(struct pt_regs *regs, int nbytes)
 	set_fs(fs);
 }
 
+#ifdef CONFIG_SEC_DEBUG
+void sec_debug_panic_message(int en);
+#endif
 void __show_regs(struct pt_regs *regs)
 {
 	unsigned long flags;
 	char buf[64];
 
 	show_regs_print_info(KERN_DEFAULT);
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_panic_message(0);
+#endif
 
 	print_symbol("PC is at %s\n", instruction_pointer(regs));
 	print_symbol("LR is at %s\n", regs->ARM_lr);
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_panic_message(1);
+#endif
 	printk("pc : [<%08lx>]    lr : [<%08lx>]    psr: %08lx\n"
 	       "sp : %08lx  ip : %08lx  fp : %08lx\n",
 		regs->ARM_pc, regs->ARM_lr, regs->ARM_cpsr,

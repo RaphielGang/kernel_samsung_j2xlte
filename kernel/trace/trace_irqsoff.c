@@ -16,6 +16,8 @@
 #include <linux/ftrace.h>
 #include <linux/fs.h>
 
+#include <soc/sprd/trace_eirqsoff.h>
+
 #include "trace.h"
 
 static struct trace_array		*irqsoff_trace __read_mostly;
@@ -439,11 +441,15 @@ void start_critical_timings(void)
 {
 	if (preempt_trace() || irq_trace())
 		start_critical_timing(CALLER_ADDR0, CALLER_ADDR1);
+	if (!preempt_trace())
+		start_eirqsoff_timing();
 }
 EXPORT_SYMBOL_GPL(start_critical_timings);
 
 void stop_critical_timings(void)
 {
+	if (!preempt_trace())
+		stop_eirqsoff_timing();
 	if (preempt_trace() || irq_trace())
 		stop_critical_timing(CALLER_ADDR0, CALLER_ADDR1);
 }
@@ -453,6 +459,8 @@ EXPORT_SYMBOL_GPL(stop_critical_timings);
 #ifdef CONFIG_PROVE_LOCKING
 void time_hardirqs_on(unsigned long a0, unsigned long a1)
 {
+	if (!preempt_trace())
+		stop_eirqsoff_timing();
 	if (!preempt_trace() && irq_trace())
 		stop_critical_timing(a0, a1);
 }
@@ -461,6 +469,8 @@ void time_hardirqs_off(unsigned long a0, unsigned long a1)
 {
 	if (!preempt_trace() && irq_trace())
 		start_critical_timing(a0, a1);
+	if (!preempt_trace())
+		start_eirqsoff_timing();
 }
 
 #else /* !CONFIG_PROVE_LOCKING */
@@ -486,6 +496,8 @@ inline void print_irqtrace_events(struct task_struct *curr)
  */
 void trace_hardirqs_on(void)
 {
+	if (!preempt_trace())
+		stop_eirqsoff_timing();
 	if (!preempt_trace() && irq_trace())
 		stop_critical_timing(CALLER_ADDR0, CALLER_ADDR1);
 }
@@ -495,11 +507,15 @@ void trace_hardirqs_off(void)
 {
 	if (!preempt_trace() && irq_trace())
 		start_critical_timing(CALLER_ADDR0, CALLER_ADDR1);
+	if (!preempt_trace())
+		start_eirqsoff_timing();
 }
 EXPORT_SYMBOL(trace_hardirqs_off);
 
 void trace_hardirqs_on_caller(unsigned long caller_addr)
 {
+	if (!preempt_trace())
+		stop_eirqsoff_timing();
 	if (!preempt_trace() && irq_trace())
 		stop_critical_timing(CALLER_ADDR0, caller_addr);
 }
@@ -509,6 +525,8 @@ void trace_hardirqs_off_caller(unsigned long caller_addr)
 {
 	if (!preempt_trace() && irq_trace())
 		start_critical_timing(CALLER_ADDR0, caller_addr);
+	if (!preempt_trace())
+		start_eirqsoff_timing();
 }
 EXPORT_SYMBOL(trace_hardirqs_off_caller);
 

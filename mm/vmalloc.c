@@ -931,8 +931,12 @@ again:
 		int i;
 
 		spin_lock(&vb->lock);
-		if (vb->free < 1UL << order)
+		if (vb->free < 1UL << order) {
+			if (vb->free + vb->dirty == VMAP_BBMAP_BITS) {
+				purge = 1;
+			}
 			goto next;
+		}
 
 		i = bitmap_find_free_region(vb->alloc_map,
 						VMAP_BBMAP_BITS, order);
@@ -1282,19 +1286,15 @@ void unmap_kernel_range(unsigned long addr, unsigned long size)
 	flush_tlb_kernel_range(addr, end);
 }
 
-int map_vm_area(struct vm_struct *area, pgprot_t prot, struct page ***pages)
+int map_vm_area(struct vm_struct *area, pgprot_t prot, struct page **pages)
 {
 	unsigned long addr = (unsigned long)area->addr;
 	unsigned long end = addr + area->size - PAGE_SIZE;
 	int err;
 
-	err = vmap_page_range(addr, end, prot, *pages);
-	if (err > 0) {
-		*pages += err;
-		err = 0;
-	}
+	err = vmap_page_range(addr, end, prot, pages);
 
-	return err;
+	return err > 0 ? 0 : err;
 }
 EXPORT_SYMBOL_GPL(map_vm_area);
 
@@ -1498,7 +1498,11 @@ static void __vunmap(const void *addr, int deallocate_pages)
 			struct page *page = area->pages[i];
 
 			BUG_ON(!page);
+#ifndef CONFIG_SPRD_PAGERECORDER
 			__free_page(page);
+#else
+			__free_page_nopagedebug(page);
+#endif
 		}
 
 		if (area->flags & VM_VPAGES)
@@ -1586,7 +1590,7 @@ void *vmap(struct page **pages, unsigned int count,
 	if (!area)
 		return NULL;
 
-	if (map_vm_area(area, prot, &pages)) {
+	if (map_vm_area(area, prot, pages)) {
 		vunmap(area->addr);
 		return NULL;
 	}
@@ -1631,7 +1635,11 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 		gfp_t tmp_mask = gfp_mask | __GFP_NOWARN;
 
 		if (node < 0)
+#ifndef CONFIG_SPRD_PAGERECORDER
 			page = alloc_page(tmp_mask);
+#else
+			page = alloc_page_nopagedebug(tmp_mask);
+#endif
 		else
 			page = alloc_pages_node(node, tmp_mask, order);
 
@@ -1643,7 +1651,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 		area->pages[i] = page;
 	}
 
-	if (map_vm_area(area, prot, &pages))
+	if (map_vm_area(area, prot, pages))
 		goto fail;
 	return area->addr;
 
@@ -2546,6 +2554,77 @@ void pcpu_free_vm_areas(struct vm_struct **vms, int nr_vms)
 }
 #endif	/* CONFIG_SMP */
 
+#ifdef CONFIG_E_SHOW_MEM
+void print_vmalloc_info(enum e_show_mem_type type)
+{
+	struct vmap_area *va;
+	struct vm_struct *v;
+	unsigned long total_pages = 0;
+
+	printk("Detail:\n");
+	spin_lock(&vmap_area_lock);
+
+	if (list_empty(&vmap_area_list))
+		goto out;
+
+
+	list_for_each_entry(va, &vmap_area_list, list) {
+		if (va->flags & (VM_LAZY_FREE | VM_LAZY_FREEING))
+			continue;
+		if (!(va->flags & VM_VM_AREA))
+			continue;
+
+		v = va->vm;
+		if (v->nr_pages) {
+			total_pages += v->nr_pages;
+			if (E_SHOW_MEM_BASIC == type) {
+				/* 1M Bytes */
+				if ((v->nr_pages << (PAGE_SHIFT - 10)) < 1024)
+					continue;
+			} else if (E_SHOW_MEM_CLASSIC == type) {
+				/* 512K Bytes */
+				if ((v->nr_pages << (PAGE_SHIFT - 10)) < 512)
+					continue;
+			} else {
+				/* 128K Bytes */
+				if ((v->nr_pages << (PAGE_SHIFT - 10)) < 128)
+					continue;
+			}
+			printk("0x%p-0x%p %7ld",
+				v->addr, v->addr + v->size, v->size);
+			if (v->caller)
+				printk(" %pS", v->caller);
+			if (v->nr_pages)
+				printk(" %lukB",
+				  (unsigned long)(v->nr_pages
+				  << (PAGE_SHIFT - 10)));
+			if (v->flags & VM_ALLOC)
+				printk(" vmalloc\n");
+		}
+	}
+	printk("Total used:%lukB\n",
+		(unsigned long)(total_pages << (PAGE_SHIFT - 10)));
+
+out:
+	spin_unlock(&vmap_area_lock);
+}
+
+static int vmalloc_e_show_mem_handler(struct notifier_block *nb,
+			unsigned long val, void *data)
+{
+	enum e_show_mem_type type = val;
+	printk("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	printk("Enhanced Mem-info :VMALLOC\n");
+	print_vmalloc_info(type);
+	return 0;
+}
+
+static struct notifier_block vmalloc_e_show_mem_notifier = {
+	.notifier_call = vmalloc_e_show_mem_handler,
+};
+
+#endif
+
 #ifdef CONFIG_PROC_FS
 static void *s_start(struct seq_file *m, loff_t *pos)
 	__acquires(&vmap_area_lock)
@@ -2693,6 +2772,9 @@ static const struct file_operations proc_vmalloc_operations = {
 static int __init proc_vmalloc_init(void)
 {
 	proc_create("vmallocinfo", S_IRUSR, NULL, &proc_vmalloc_operations);
+#ifdef CONFIG_E_SHOW_MEM
+	register_e_show_mem_notifier(&vmalloc_e_show_mem_notifier);
+#endif
 	return 0;
 }
 module_init(proc_vmalloc_init);
@@ -2745,4 +2827,3 @@ out:
 	spin_unlock(&vmap_area_lock);
 }
 #endif
-

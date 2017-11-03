@@ -78,7 +78,10 @@ static ssize_t show_##file_name##_gov_sys				\
 (struct kobject *kobj, struct attribute *attr, char *buf)		\
 {									\
 	struct _gov##_dbs_tuners *tuners = _gov##_dbs_cdata.gdbs_data->tuners; \
-	return sprintf(buf, "%u\n", tuners->file_name);			\
+	if(tuners->file_name > 0)						\
+		return sprintf(buf, "%u\n", tuners->file_name);			\
+	else									\
+		return sprintf(buf, "%d\n", tuners->file_name);			\
 }									\
 									\
 static ssize_t show_##file_name##_gov_pol					\
@@ -182,6 +185,44 @@ struct cs_dbs_tuners {
 	unsigned int freq_step;
 };
 
+struct sd_dbs_tuners {
+	unsigned int ignore_nice;
+	unsigned int sampling_rate;
+	unsigned int sampling_down_factor;
+	unsigned int up_threshold;
+	unsigned int adj_up_threshold;
+	unsigned int powersave_bias;
+	unsigned int io_is_busy;
+
+	unsigned int cpu_hotplug_disable;
+	unsigned int is_suspend;
+	unsigned int cpu_score_up_threshold;
+	unsigned int load_critical;
+	unsigned int load_hi;
+	unsigned int load_mid;
+	unsigned int load_light;
+	unsigned int load_lo;
+	int load_critical_score;
+	int load_hi_score;
+	int load_mid_score;
+	int load_light_score;
+	int load_lo_score;
+	unsigned int cpu_down_threshold;
+	unsigned int cpu_down_count;
+	unsigned int cpu_num_limit;
+	unsigned int cpu_up_mid_threshold;
+	unsigned int cpu_up_high_threshold;
+	unsigned int cpu_down_mid_threshold;
+	unsigned int cpu_down_high_threshold;
+	unsigned int up_window_size;
+	unsigned int down_window_size;
+	int boostpulse_duration;
+	u64 boostpulse_endtime;
+	int boost;
+	bool boosted;
+	int boost_cpu;
+};
+
 /* Common Governer data across policies */
 struct dbs_data;
 struct common_dbs_data {
@@ -240,6 +281,9 @@ static inline int delay_for_sampling_rate(unsigned int sampling_rate)
 	return delay;
 }
 
+bool is_governor_busy(struct cpufreq_policy *policy);
+void set_governor_busy(struct cpufreq_policy *policy, bool busy);
+
 #define declare_show_sampling_rate_min(_gov)				\
 static ssize_t show_sampling_rate_min_gov_sys				\
 (struct kobject *kobj, struct attribute *attr, char *buf)		\
@@ -254,6 +298,8 @@ static ssize_t show_sampling_rate_min_gov_pol				\
 	struct dbs_data *dbs_data = policy->governor_data;		\
 	return sprintf(buf, "%u\n", dbs_data->min_sampling_rate);	\
 }
+
+extern struct mutex cpufreq_governor_lock;
 
 void dbs_check_cpu(struct dbs_data *dbs_data, int cpu);
 bool need_load_eval(struct cpu_dbs_common_info *cdbs,

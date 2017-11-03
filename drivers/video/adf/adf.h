@@ -20,6 +20,8 @@
 #include <video/adf.h>
 #include "sync.h"
 
+#define ADF_MAX_PENDING_POST_CMD 3
+
 struct adf_event_refcount {
 	struct rb_node node;
 	enum adf_event_type type;

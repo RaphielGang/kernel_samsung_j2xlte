@@ -51,7 +51,10 @@
 #include <asm/mmu_context.h>
 #include <asm/processor.h>
 #include <asm/stacktrace.h>
-
+#ifdef CONFIG_SEC_DEBUG64
+#include <soc/sprd/sec_debug64.h>
+void sec_debug_panic_message(int en);
+#endif
 #ifdef CONFIG_CC_STACKPROTECTOR
 #include <linux/stackprotector.h>
 unsigned long __stack_chk_guard __read_mostly;
@@ -95,6 +98,17 @@ void arch_cpu_idle(void)
 	}
 }
 
+void arch_cpu_idle_enter(void)
+{
+	idle_notifier_call_chain(IDLE_START);
+}
+
+void arch_cpu_idle_exit(void)
+{
+	idle_notifier_call_chain(IDLE_END);
+}
+
+
 #ifdef CONFIG_HOTPLUG_CPU
 void arch_cpu_idle_dead(void)
 {
@@ -104,27 +118,30 @@ void arch_cpu_idle_dead(void)
 
 void machine_shutdown(void)
 {
-#ifdef CONFIG_SMP
-	smp_send_stop();
-#endif
+	disable_nonboot_cpus();
 }
 
 void machine_halt(void)
 {
-	machine_shutdown();
+	local_irq_disable();
+	smp_send_stop();
 	while (1);
 }
 
 void machine_power_off(void)
 {
-	machine_shutdown();
+	local_irq_disable();
+	smp_send_stop();
 	if (pm_power_off)
 		pm_power_off();
 }
 
 void machine_restart(char *cmd)
 {
-	machine_shutdown();
+	local_irq_disable();
+	smp_send_stop();
+
+	pr_emerg("Restarting %s\n", linux_banner);
 
 	/* Disable interrupts first */
 	local_irq_disable();
@@ -221,8 +238,14 @@ void __show_regs(struct pt_regs *regs)
 	}
 
 	show_regs_print_info(KERN_DEFAULT);
+#ifdef CONFIG_SEC_DEBUG64
+	sec_debug_panic_message(0);
+#endif
 	print_symbol("PC is at %s\n", instruction_pointer(regs));
 	print_symbol("LR is at %s\n", lr);
+#ifdef CONFIG_SEC_DEBUG64
+	sec_debug_panic_message(1);
+#endif
 	printk("pc : [<%016llx>] lr : [<%016llx>] pstate: %08llx\n",
 	       regs->pc, lr, regs->pstate);
 	printk("sp : %016llx\n", sp);
@@ -357,6 +380,13 @@ static void tls_thread_switch(struct task_struct *next)
 	: : "r" (tpidr), "r" (tpidrro));
 }
 
+#if defined(CONFIG_SPRD_DEBUG_CPU_RATE) && defined(CONFIG_SPRD_DEBUG)
+extern void update_cpu_usage(struct task_struct *prev, struct task_struct *next);
+#define sprd_update_cpu_usage(prev, next)	update_cpu_usage(prev, next)
+#else
+#define sprd_update_cpu_usage(prev, next)
+#endif
+
 /*
  * Thread switching.
  */
@@ -369,6 +399,8 @@ struct task_struct *__switch_to(struct task_struct *prev,
 	tls_thread_switch(next);
 	hw_breakpoint_thread_switch(next);
 	contextidr_thread_switch(next);
+
+	sprd_update_cpu_usage(prev, next);
 
 	/*
 	 * Complete any pending TLB or cache maintenance on this CPU in case

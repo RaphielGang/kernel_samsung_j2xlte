@@ -33,7 +33,11 @@
 pgd_t *pgd_alloc(struct mm_struct *mm)
 {
 	if (PGD_SIZE == PAGE_SIZE)
+#ifndef CONFIG_SPRD_PAGERECORDER
 		return (pgd_t *)get_zeroed_page(GFP_KERNEL);
+#else
+		return (pgd_t *)get_zeroed_page_nopagedebug(GFP_KERNEL);
+#endif
 	else
 		return kzalloc(PGD_SIZE, GFP_KERNEL);
 }
@@ -41,7 +45,11 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 {
 	if (PGD_SIZE == PAGE_SIZE)
+#ifndef CONFIG_SPRD_PAGERECORDER
 		free_page((unsigned long)pgd);
+#else
+		free_page_nopagedebug((unsigned long)pgd);
+#endif
 	else
 		kfree(pgd);
 }

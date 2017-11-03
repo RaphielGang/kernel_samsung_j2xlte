@@ -22,6 +22,7 @@
 
 #include <linux/compat.h>
 #include <linux/slab.h>
+#include <sound/sprd_memcpy_ops.h>
 
 struct snd_seq_port_info32 {
 	struct snd_seq_addr addr;	/* client/port numbers */
@@ -64,7 +65,7 @@ static int snd_seq_call_port_info_ioctl(struct snd_seq_client *client, unsigned 
 	if (err < 0)
 		goto error;
 
-	if (copy_to_user(data32, data, sizeof(*data32)) ||
+	if (unalign_copy_to_user(data32, data, sizeof(*data32)) ||
 	    put_user(data->flags, &data32->flags) ||
 	    put_user(data->time_queue, &data32->time_queue))
 		err = -EFAULT;

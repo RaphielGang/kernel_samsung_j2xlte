@@ -57,7 +57,7 @@ struct cma;
 struct page;
 struct device;
 
-#ifdef CONFIG_DMA_CMA
+#ifdef CONFIG_CMA
 
 /*
  * There is always at least global CMA area and a few optional device
@@ -86,32 +86,26 @@ static inline void dma_contiguous_set_default(struct cma *cma)
 }
 
 void dma_contiguous_reserve(phys_addr_t addr_limit);
-
-int __init dma_contiguous_reserve_area(phys_addr_t size, phys_addr_t base,
-				       phys_addr_t limit, struct cma **res_cma);
-
-/**
- * dma_declare_contiguous() - reserve area for contiguous memory handling
- *			      for particular device
- * @dev:   Pointer to device structure.
- * @size:  Size of the reserved memory.
- * @base:  Start address of the reserved memory (optional, 0 for any).
- * @limit: End address of the reserved memory (optional, 0 for any).
- *
- * This function reserves memory for specified device. It should be
- * called by board specific code when early allocator (memblock or bootmem)
- * is still activate.
- */
-
+int dma_contiguous_reserve_area(struct device *dev, phys_addr_t size,
+				  phys_addr_t base, phys_addr_t limit,
+				  phys_addr_t reserve_size, phys_addr_t threshold_size);
 static inline int dma_declare_contiguous(struct device *dev, phys_addr_t size,
-					 phys_addr_t base, phys_addr_t limit)
+			   phys_addr_t base, phys_addr_t limit)
 {
-	struct cma *cma;
 	int ret;
-	ret = dma_contiguous_reserve_area(size, base, limit, &cma);
-	if (ret == 0)
-		dev_set_cma_area(dev, cma);
+	ret = dma_contiguous_reserve_area(dev, size,
+				  base, limit, 0, 0);
+	return ret;
+}
 
+static inline int dma_declare_contiguous_reserved(struct device *dev,
+					 phys_addr_t size, phys_addr_t base,
+					 phys_addr_t limit, phys_addr_t reserve_size,
+					 phys_addr_t threshold_size)
+{
+	int ret;
+	ret = dma_contiguous_reserve_area(dev, size,
+				  base, limit, reserve_size, threshold_size);
 	return ret;
 }
 
@@ -134,11 +128,6 @@ static inline void dev_set_cma_area(struct device *dev, struct cma *cma) { }
 static inline void dma_contiguous_set_default(struct cma *cma) { }
 
 static inline void dma_contiguous_reserve(phys_addr_t limit) { }
-
-static inline int dma_contiguous_reserve_area(phys_addr_t size, phys_addr_t base,
-				       phys_addr_t limit, struct cma **res_cma) {
-	return -ENOSYS;
-}
 
 static inline
 int dma_declare_contiguous(struct device *dev, phys_addr_t size,

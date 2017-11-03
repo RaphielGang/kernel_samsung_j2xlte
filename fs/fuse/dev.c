@@ -21,6 +21,7 @@
 #include <linux/splice.h>
 #include <linux/aio.h>
 #include <linux/freezer.h>
+#include <linux/kthread.h>
 
 MODULE_ALIAS_MISCDEV(FUSE_MINOR);
 MODULE_ALIAS("devname:fuse");
@@ -466,9 +467,14 @@ __acquires(fc->lock)
 	 */
 	spin_unlock(&fc->lock);
 
-	while (req->state != FUSE_REQ_FINISHED)
-		wait_event_freezable(req->waitq,
-				     req->state == FUSE_REQ_FINISHED);
+	while (req->state != FUSE_REQ_FINISHED) {
+		if (unlikely(test_thread_flag(TIF_MEMDIE))) {
+			wait_event(req->waitq, req->state == FUSE_REQ_FINISHED);
+		} else {
+			wait_event_freezable(req->waitq,
+					     req->state == FUSE_REQ_FINISHED);
+		}
+	}
 	spin_lock(&fc->lock);
 
 	if (!req->aborted)

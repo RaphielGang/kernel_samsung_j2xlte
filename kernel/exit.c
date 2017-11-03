@@ -712,6 +712,9 @@ static void check_stack_usage(void)
 static inline void check_stack_usage(void) {}
 #endif
 
+#ifdef CONFIG_SPRD_IODEBUG_IOSCHEDULE
+extern void iodebug_ioschedule_timer_cancel(struct task_struct *task);
+#endif
 void do_exit(long code)
 {
 	struct task_struct *tsk = current;
@@ -802,6 +805,10 @@ void do_exit(long code)
 	exit_shm(tsk);
 	exit_files(tsk);
 	exit_fs(tsk);
+#ifdef CONFIG_SPRD_IODEBUG_IOSCHEDULE
+	if (tsk->lock_timer)
+		iodebug_ioschedule_timer_cancel(tsk);
+#endif
 	if (group_dead)
 		disassociate_ctty(1);
 	exit_task_namespaces(tsk);

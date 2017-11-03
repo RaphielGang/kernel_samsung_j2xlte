@@ -176,6 +176,7 @@ config NETFILTER_DEBUG
 config NETFILTER_ADVANCED
 	bool "Advanced netfilter configuration"
 	depends on NETFILTER
+	select NETFILTER_XT_TARGET_IDLETIMER
 	default y
 	help
 	  If you say Y here you can select between all the netfilter modules.

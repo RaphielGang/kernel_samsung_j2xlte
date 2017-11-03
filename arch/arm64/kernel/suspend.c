@@ -36,6 +36,8 @@ int __cpu_suspend_finisher(unsigned long arg, struct cpu_suspend_ctx *ptr,
 	__flush_dcache_area(ptr, sizeof(*ptr));
 	__flush_dcache_area(save_ptr, sizeof(*save_ptr));
 
+	flush_cache_all();
+
 	return cpu_ops[cpu]->cpu_suspend(arg);
 }
 

@@ -24,6 +24,8 @@
 
 #include "adf.h"
 
+#define ADF_MATCH_SPEED_TIMEOUT (3 * MSEC_PER_SEC)
+
 static inline bool vsync_active(u8 state)
 {
 	return state == DRM_MODE_DPMS_ON || state == DRM_MODE_DPMS_STANDBY;
@@ -311,10 +313,40 @@ done:
 	return ret;
 }
 
+/*
+func:fence_sprintf
+desc:generate a fence name string,
+     so systrace can check which pt it is waiting.
+     systrace does not accept Arabic numerals character as a fence name,
+     so we use alphabet to represent Arabic numerals character.
+     the mapping relationship is below:
+     ABCDEFGHIJ
+     0123456789
+example:
+     if the input n is 3975, for GSP, this function will generate a string
+     "GSPDJHF"
+*/
+void fence_sprintf(char *str, char *tag, int n)
+{
+	int len = 0, i = 0;
+	char temp[32];
+	char tmp[32];
+	sprintf(temp, "%d", n);
+	len = strlen(temp);
+
+	while (i < len) {
+		tmp[i] = temp[i] + 0x11;
+		i++;
+	}
+	tmp[i] = '\0';
+	sprintf(str, "%s%s", tag, tmp);
+}
+
 static struct sync_fence *adf_sw_complete_fence(struct adf_device *dev)
 {
 	struct sync_pt *pt;
 	struct sync_fence *complete_fence;
+	char name[ADF_NAME_LEN];
 
 	if (!dev->timeline) {
 		dev->timeline = sw_sync_timeline_create(dev->base.name);
@@ -327,7 +359,9 @@ static struct sync_fence *adf_sw_complete_fence(struct adf_device *dev)
 	pt = sw_sync_pt_create(dev->timeline, dev->timeline_max);
 	if (!pt)
 		goto err_pt_create;
-	complete_fence = sync_fence_create(dev->base.name, pt);
+
+	fence_sprintf(name, "ADF", dev->timeline_max);
+	complete_fence = sync_fence_create(name, pt);
 	if (!complete_fence)
 		goto err_fence_create;
 
@@ -417,6 +451,37 @@ err_alloc:
 }
 EXPORT_SYMBOL(adf_device_post);
 
+static bool adf_check_status(struct adf_device *dev)
+{
+	bool wait_signal = false;
+
+	mutex_lock(&dev->post_lock);
+	if (!dev->n_pending_post_cmd)
+		wait_signal = true;
+
+	mutex_unlock(&dev->post_lock);
+
+	return wait_signal;
+}
+
+static void adf_match_speed(struct adf_device *dev, long timeout)
+{
+	int err = 0;
+
+	if (timeout > 0) {
+		timeout = msecs_to_jiffies(timeout);
+		err = wait_event_interruptible_timeout(dev->pending_wq,
+						       adf_check_status(dev),
+						       timeout);
+	} else if (timeout < 0) {
+		err = wait_event_interruptible(dev->pending_wq,
+					       adf_check_status(dev));
+	}
+
+	if (!err)
+		pr_err("%s: timeout\n", __func__);
+}
+
 /**
  * adf_device_post_nocopy - flip to a new set of buffers
  *
@@ -444,6 +509,7 @@ struct sync_fence *adf_device_post_nocopy(struct adf_device *dev,
 	struct sync_fence *ret;
 	size_t i;
 	int err;
+	bool need_match_speed = false;
 
 	cfg = kzalloc(sizeof(*cfg), GFP_KERNEL);
 	if (!cfg)
@@ -496,8 +562,15 @@ struct sync_fence *adf_device_post_nocopy(struct adf_device *dev,
 		goto err_fence;
 
 	list_add_tail(&cfg->head, &dev->post_list);
+	dev->n_pending_post_cmd++;
+	if (dev->n_pending_post_cmd > ADF_MAX_PENDING_POST_CMD)
+		need_match_speed = true;
+
 	queue_kthread_work(&dev->post_worker, &dev->post_work);
 	mutex_unlock(&dev->post_lock);
+	if (need_match_speed)
+		adf_match_speed(dev, ADF_MATCH_SPEED_TIMEOUT);
+
 	mutex_unlock(&dev->client_lock);
 	kfree(intfs);
 	return ret;

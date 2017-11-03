@@ -494,7 +494,7 @@ static inline struct dma_async_tx_descriptor *txd_next(struct dma_async_tx_descr
 struct dma_tx_state {
 	dma_cookie_t last;
 	dma_cookie_t used;
-	u32 residue;
+	unsigned long residue;
 };
 
 /**
@@ -602,6 +602,9 @@ struct dma_device {
 					    dma_cookie_t cookie,
 					    struct dma_tx_state *txstate);
 	void (*device_issue_pending)(struct dma_chan *chan);
+	int (*device_chn_start_chn)(struct dma_async_tx_descriptor *desc,
+		struct dma_chan *mstr_chn, struct dma_chan *slv_chn,
+		int start_mode, int group);
 };
 
 static inline int dmaengine_device_control(struct dma_chan *chan,

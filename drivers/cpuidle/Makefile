@@ -13,3 +13,4 @@ obj-$(CONFIG_ARCH_KIRKWOOD) += cpuidle-kirkwood.o
 ###############################################################################
 # ARM64 drivers
 obj-$(CONFIG_ARM64_CPUIDLE)		+= cpuidle-arm64.o
+obj-$(CONFIG_ARM64_CPUIDLE_SPRD)	+= cpuidle-arm64-sprd.o sprd_light_sleep.o of_idle_states.o

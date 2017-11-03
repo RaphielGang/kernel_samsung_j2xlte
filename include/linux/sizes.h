@@ -42,6 +42,7 @@
 #define SZ_512M				0x20000000
 
 #define SZ_1G				0x40000000
+#define SZ_1G_512M			0x60000000
 #define SZ_2G				0x80000000
 
 #endif /* __LINUX_SIZES_H__ */

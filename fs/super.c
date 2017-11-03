@@ -46,6 +46,23 @@ static char *sb_writers_name[SB_FREEZE_LEVELS] = {
 	"sb_internal",
 };
 
+#ifdef CONFIG_SPRD_LAZY_SHRINK_SBCACHE
+static int lazy_shrink_sbcache(void)
+{
+	struct zoneref *z;
+	struct zone *zone;
+	struct zonelist *zonelist = node_zonelist(numa_node_id(), GFP_KERNEL);
+
+	for_each_zone_zonelist(zone, z, zonelist, gfp_zone(GFP_KERNEL)) {
+		unsigned long free = zone_page_state(zone,NR_FREE_PAGES);
+		unsigned long low = (low_wmark_pages(zone) * 80) / 100;/*tune it if need*/
+		if (free > low)
+			return 1;
+	}
+	return 0;
+}
+#endif
+
 /*
  * One thing we have to be careful of with a per-sb shrinker is that we don't
  * drop the last active reference to the superblock from within the shrinker.
@@ -67,6 +84,11 @@ static int prune_super(struct shrinker *shrink, struct shrink_control *sc)
 	 */
 	if (sc->nr_to_scan && !(sc->gfp_mask & __GFP_FS))
 		return -1;
+
+#ifdef CONFIG_SPRD_LAZY_SHRINK_SBCACHE
+	if (lazy_shrink_sbcache())
+		return -1;
+#endif
 
 	if (!grab_super_passive(sb))
 		return -1;

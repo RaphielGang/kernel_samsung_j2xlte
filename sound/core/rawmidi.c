@@ -34,6 +34,8 @@
 #include <sound/control.h>
 #include <sound/minors.h>
 #include <sound/initval.h>
+#include <sound/sprd_memcpy_ops.h>
+
 
 MODULE_AUTHOR("Jaroslav Kysela <perex@perex.cz>");
 MODULE_DESCRIPTION("Midlevel RawMidi code for ALSA.");
@@ -570,7 +572,7 @@ static int snd_rawmidi_info_user(struct snd_rawmidi_substream *substream,
 	int err;
 	if ((err = snd_rawmidi_info(substream, &info)) < 0)
 		return err;
-	if (copy_to_user(_info, &info, sizeof(struct snd_rawmidi_info)))
+	if (unalign_copy_to_user(_info, &info, sizeof(struct snd_rawmidi_info)))
 		return -EFAULT;
 	return 0;
 }
@@ -613,7 +615,7 @@ static int snd_rawmidi_info_select_user(struct snd_card *card,
 		return -EFAULT;
 	if ((err = snd_rawmidi_info_select(card, &info)) < 0)
 		return err;
-	if (copy_to_user(_info, &info, sizeof(struct snd_rawmidi_info)))
+	if (unalign_copy_to_user(_info, &info, sizeof(struct snd_rawmidi_info)))
 		return -EFAULT;
 	return 0;
 }
@@ -729,7 +731,7 @@ static long snd_rawmidi_ioctl(struct file *file, unsigned int cmd, unsigned long
 	case SNDRV_RAWMIDI_IOCTL_PARAMS:
 	{
 		struct snd_rawmidi_params params;
-		if (copy_from_user(&params, argp, sizeof(struct snd_rawmidi_params)))
+		if (unalign_copy_from_user(&params, argp, sizeof(struct snd_rawmidi_params)))
 			return -EFAULT;
 		switch (params.stream) {
 		case SNDRV_RAWMIDI_STREAM_OUTPUT:
@@ -748,7 +750,7 @@ static long snd_rawmidi_ioctl(struct file *file, unsigned int cmd, unsigned long
 	{
 		int err = 0;
 		struct snd_rawmidi_status status;
-		if (copy_from_user(&status, argp, sizeof(struct snd_rawmidi_status)))
+		if (unalign_copy_from_user(&status, argp, sizeof(struct snd_rawmidi_status)))
 			return -EFAULT;
 		switch (status.stream) {
 		case SNDRV_RAWMIDI_STREAM_OUTPUT:
@@ -766,7 +768,7 @@ static long snd_rawmidi_ioctl(struct file *file, unsigned int cmd, unsigned long
 		}
 		if (err < 0)
 			return err;
-		if (copy_to_user(argp, &status, sizeof(struct snd_rawmidi_status)))
+		if (unalign_copy_to_user(argp, &status, sizeof(struct snd_rawmidi_status)))
 			return -EFAULT;
 		return 0;
 	}
@@ -946,7 +948,7 @@ static long snd_rawmidi_kernel_read1(struct snd_rawmidi_substream *substream,
 			memcpy(kernelbuf + result, runtime->buffer + runtime->appl_ptr, count1);
 		if (userbuf) {
 			spin_unlock_irqrestore(&runtime->lock, flags);
-			if (copy_to_user(userbuf + result,
+			if (unalign_copy_to_user(userbuf + result,
 					 runtime->buffer + runtime->appl_ptr, count1)) {
 				return result > 0 ? result : -EFAULT;
 			}
@@ -1186,7 +1188,7 @@ static long snd_rawmidi_kernel_write1(struct snd_rawmidi_substream *substream,
 			       kernelbuf + result, count1);
 		else if (userbuf) {
 			spin_unlock_irqrestore(&runtime->lock, flags);
-			if (copy_from_user(runtime->buffer + runtime->appl_ptr,
+			if (unalign_copy_from_user(runtime->buffer + runtime->appl_ptr,
 					   userbuf + result, count1)) {
 				spin_lock_irqsave(&runtime->lock, flags);
 				result = result > 0 ? result : -EFAULT;

@@ -23,9 +23,11 @@
 #include <linux/list.h>
 #include <linux/err.h>
 #include <linux/dma-mapping.h>
+#include <linux/workqueue.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
+#include <linux/usb/composite.h>
 
 /**
  * struct usb_udc - describes one usb device controller
@@ -67,7 +69,7 @@ int usb_gadget_map_request(struct usb_gadget *gadget,
 		}
 
 		req->num_mapped_sgs = mapped;
-	} else {
+	} else if (!req->dma_pre_mapped) {
 		req->dma = dma_map_single(&gadget->dev, req->buf, req->length,
 				is_in ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
 
@@ -92,20 +94,34 @@ void usb_gadget_unmap_request(struct usb_gadget *gadget,
 				is_in ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
 
 		req->num_mapped_sgs = 0;
-	} else {
+	} else if (!req->dma_pre_mapped && req->dma != DMA_ERROR_CODE) {
+		/*
+		 * If the DMA address has not been mapped by a higher layer,
+		 * then unmap it here. Otherwise, the DMA address will be
+		 * unmapped by the upper layer (where the request was queued).
+		 */
 		dma_unmap_single(&gadget->dev, req->dma, req->length,
-				is_in ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
+			is_in ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
+
+		req->dma = DMA_ERROR_CODE;
 	}
 }
 EXPORT_SYMBOL_GPL(usb_gadget_unmap_request);
 
 /* ------------------------------------------------------------------------- */
 
+static void usb_gadget_state_work(struct work_struct *work)
+{
+	struct usb_gadget	*gadget = work_to_gadget(work);
+
+	sysfs_notify(&gadget->dev.kobj, NULL, "status");
+}
+
 void usb_gadget_set_state(struct usb_gadget *gadget,
 		enum usb_device_state state)
 {
 	gadget->state = state;
-	sysfs_notify(&gadget->dev.kobj, NULL, "state");
+	schedule_work(&gadget->work);
 }
 EXPORT_SYMBOL_GPL(usb_gadget_set_state);
 
@@ -192,6 +208,7 @@ int usb_add_gadget_udc_release(struct device *parent, struct usb_gadget *gadget,
 		goto err1;
 
 	dev_set_name(&gadget->dev, "gadget");
+	INIT_WORK(&gadget->work, usb_gadget_state_work);
 	gadget->dev.parent = parent;
 
 	dma_set_coherent_mask(&gadget->dev, parent->coherent_dma_mask);
@@ -309,6 +326,7 @@ found:
 		usb_gadget_remove_driver(udc);
 
 	kobject_uevent(&udc->dev.kobj, KOBJ_REMOVE);
+	flush_work(&gadget->work);
 	device_unregister(&udc->dev);
 	device_unregister(&gadget->dev);
 }
@@ -428,6 +446,37 @@ int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
 }
 EXPORT_SYMBOL_GPL(usb_gadget_unregister_driver);
 
+int usb_func_ep_queue(struct usb_function *func, struct usb_ep *ep,
+			       struct usb_request *req, gfp_t gfp_flags)
+{
+	int ret;
+	struct usb_gadget *gadget;
+
+	if (!func || !ep || !req) {
+		pr_err("Invalid argument. func=%p, ep=%p, req=%p\n",
+			func, ep, req);
+		return -EINVAL;
+	}
+
+	pr_debug("Function %s queueing new data into ep %u\n",
+		func->name ? func->name : "", ep->address);
+
+	gadget = func->config->cdev->gadget;
+	if ((gadget->speed == USB_SPEED_SUPER) && func->func_is_suspended) {
+		ret = usb_func_wakeup(func);
+		if (ret) {
+			pr_err("Failed to send function wake up notification. func name:%s, ep:%u\n",
+				func->name ? func->name : "",
+				ep->address);
+			return ret;
+		}
+	}
+
+	ret = usb_ep_queue(ep, req, gfp_flags);
+	return ret;
+}
+
+
 /* ------------------------------------------------------------------------- */
 
 static ssize_t usb_udc_srp_store(struct device *dev,
@@ -446,11 +495,6 @@ static ssize_t usb_udc_softconn_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t n)
 {
 	struct usb_udc		*udc = container_of(dev, struct usb_udc, dev);
-
-	if (!udc->driver) {
-		dev_err(dev, "soft-connect without a gadget driver\n");
-		return -EOPNOTSUPP;
-	}
 
 	if (sysfs_streq(buf, "connect")) {
 		usb_gadget_udc_start(udc->gadget, udc->driver);

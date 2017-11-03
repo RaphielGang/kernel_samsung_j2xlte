@@ -217,6 +217,148 @@ dtb-$(CONFIG_ARCH_VT8500) += vt8500-bv07.dtb \
 	wm8850-w70v2.dtb
 dtb-$(CONFIG_ARCH_ZYNQ) += zynq-zc702.dtb
 
+ifeq ($(CONFIG_CMA),y)
+dtb-$(CONFIG_MACH_SPX15) += sprd-scx15_sp7715ea_cma.dtb
+dtb-$(CONFIG_MACH_KANAS_W) += sprd-scx35_kanas_w_cma.dtb
+else
+dtb-$(CONFIG_MACH_SPX15) += sprd-scx15_sp7715ea.dtb
+dtb-$(CONFIG_MACH_KANAS_W) += sprd-scx35_kanas_w.dtb
+endif
+dtb-$(CONFIG_MACH_CORSICA_VE_DT) += sprd-scx15_corsica_ve.dtb
+dtb-$(CONFIG_MACH_SPX35) += sprd-scx35_sp8830ec.dtb
+dtb-$(CONFIG_MACH_SP8830GEA) += sprd-scx35_sp8830gea.dtb
+dtb-$(CONFIG_MACH_SP8730SEA) += sprd-scx35_sp8730sea.dtb
+dtb-$(CONFIG_MACH_SP7730GGA) += sprd-scx35_sp7730gga.dtb
+dtb-$(CONFIG_MACH_SP7731GGA_LC) += sprd-scx35_sp7731gga_lc.dtb
+dtb-$(CONFIG_MACH_SP7730SW_FPGA) += sprd-scx35_sp7730sw_fpga.dtb
+dtb-$(CONFIG_MACH_SP7730SW_T2) += sprd-scx35_sp7730sw_t2.dtb
+dtb-$(CONFIG_MACH_SP7730SW) += sprd-scx35_sp7730sw.dtb
+dtb-$(CONFIG_MACH_SP8730SEEA_T3) += sprd-scx35_sp8730seea_t3.dtb
+dtb-$(CONFIG_MACH_SP7731GEA_HD2) += sprd-scx35_sp7731gea_hd2.dtb
+dtb-$(CONFIG_MACH_SP7731GEA_HD) += sprd-scx35_sp7731gea_hd.dtb
+dtb-$(CONFIG_MACH_SP7731GEA) += sprd-scx35_sp7731gea.dtb
+dtb-$(CONFIG_MACH_SP7731GEA) += sprd-scx35_sp7731gea_adf.dtb
+dtb-$(CONFIG_MACH_SP7731GEA_HDR) += sprd-scx35_sp7731gea_hdr.dtb
+dtb-$(CONFIG_MACH_SP8730SEEA_QHD) += sprd-scx35_sp8730seea_qhd.dtb
+dtb-$(CONFIG_MACH_SP8730SEEA_JIG) += sprd-scx35_sp8730seea_jig.dtb
+dtb-$(CONFIG_MACH_SP7731GEA_QHD) += sprd-scx35_sp7731gea_qhd.dtb
+dtb-$(CONFIG_MACH_SP7731GEPIKE) += sprd-scx35_sp7731gepike.dtb
+dtb-$(CONFIG_MACH_SP7731GEA_FWVGA) += sprd-scx35_sp7731gea_fwvga.dtb
+dtb-$(CONFIG_MACH_SP7731GEAOPENPHONE) += sprd-scx35_sp7731geaopenphone.dtb
+dtb-$(CONFIG_MACH_TSHARKWSAMSUNG) += sprd-scx35_tsharkwsamsung.dtb
+dtb-$(CONFIG_MACH_PIKEAYOUNG2DTV) += sprd-scx35_pikeayoung2dtv.dtb
+dtb-$(CONFIG_MACH_CORE3) += sprd-scx35_core3.dtb
+dtb-$(CONFIG_MACH_SPX35LFPGA) += sprd-scx35l_sp9630fpga.dtb
+dtb-$(CONFIG_MACH_COREPRIMELITE) += sprd-scx35l_coreprimelite.dtb
+dtb-$(CONFIG_MACH_SHARKLS_Z3LTE) += sprd-scx35l_sharkls_z3lte.dtb
+dtb-$(CONFIG_MACH_SHARKL_J1POPLTE) += sprd-scx35l_sharkl_j1poplte.dtb
+dtb-$(CONFIG_MACH_SHARKLS_J1MINI) += sprd-scx35l_sharkls_j1mini.dtb
+dtb-$(CONFIG_MACH_SHARKLS_J3LTE) += sprd-scx35l_sharkls_j3lte.dtb
+dtb-$(CONFIG_MACH_SHARKLS_J1MINI) += sprd-scx35rkls_jl_sha1mini.dtb
+dtb-$(CONFIG_MACH_SHARKLS_J3LTE) += sprd-scx35l_sharkls_j3lte.dtb
+dtb-$(CONFIG_MACH_ACE4NEOLTE) += sprd-scx35l_sharkl_ace4neolte.dtb
+dtb-$(CONFIG_MACH_J1ACEVELTE) += sprd-scx35l_sharkls_j1acevelte_rev00.dtb \
+				sprd-scx35l_sharkls_j1acevelte_rev01.dtb \
+				sprd-scx35l_sharkls_j1acevelte_rev02.dtb \
+				sprd-scx35l_sharkls_j1acevelte_rev03.dtb \
+				sprd-scx35l_sharkls_j1acevelte_rev04.dtb
+dtb-$(CONFIG_MACH_J1ACEVELTE_LTN_OPEN) += sprd-scx35l_sharkls_j1acevelte_ltn_open_rev00.dts \
+				sprd-scx35l_sharkls_j1acevelte_ltn_open_rev01.dts \
+				sprd-scx35l_sharkls_j1acevelte_ltn_open_rev02.dts \
+				sprd-scx35l_sharkls_j1acevelte_ltn_open_rev03.dts \
+				sprd-scx35l_sharkls_j1acevelte_ltn_open_rev04.dts
+dtb-$(CONFIG_MACH_J1MINILTE) += sprd-scx35l_sharkls_j1minilte_rev00.dtb \
+				sprd-scx35l_sharkls_j1minilte_rev01.dtb \
+				sprd-scx35l_sharkls_j1minilte_rev02.dtb \
+				sprd-scx35l_sharkls_j1minilte_rev03.dtb \
+				sprd-scx35l_sharkls_j1minilte_rev04.dtb
+dtb-$(CONFIG_MACH_J3XLTE) += sprd-scx35l_sharkls_j3xlte_rev00.dtb \
+				sprd-scx35l_sharkls_j3xlte_rev01.dtb \
+				sprd-scx35l_sharkls_j3xlte_rev02.dtb \
+				sprd-scx35l_sharkls_j3xlte_rev03.dtb \
+				sprd-scx35l_sharkls_j3xlte_rev04.dtb \
+				sprd-scx35l_sharkls_j3xlte_rev05.dtb \
+				sprd-scx35l_sharkls_j3xlte_rev06.dtb \
+				sprd-scx35l_sharkls_j3xlte_rev07.dtb
+dtb-$(CONFIG_MACH_J3XNLTE) += sprd-scx35l_sharkls_j3xnlte_rev00.dtb \
+				sprd-scx35l_sharkls_j3xnlte_rev01.dtb \
+				sprd-scx35l_sharkls_j3xnlte_rev02.dtb \
+				sprd-scx35l_sharkls_j3xnlte_rev03.dtb \
+				sprd-scx35l_sharkls_j3xnlte_rev04.dtb \
+				sprd-scx35l_sharkls_j3xnlte_rev05.dtb
+dtb-$(CONFIG_MACH_J2XLTE) += sprd-scx35l_sharkls_j2xlte_rev00.dtb \
+				sprd-scx35l_sharkls_j2xlte_rev01.dtb \
+				sprd-scx35l_sharkls_j2xlte_rev02.dtb \
+				sprd-scx35l_sharkls_j2xlte_rev03.dtb \
+				sprd-scx35l_sharkls_j2xlte_rev04.dtb \
+				sprd-scx35l_sharkls_j2xlte_rev05.dtb 
+dtb-$(CONFIG_MACH_GTEXSLTE) += sprd-scx35l_sharkls_gtexslte_rev00.dtb \
+				sprd-scx35l_sharkls_gtexslte_rev01.dtb \
+				sprd-scx35l_sharkls_gtexslte_rev02.dtb \
+				sprd-scx35l_sharkls_gtexslte_rev03.dtb
+dtb-$(CONFIG_MACH_SP9630EA3MN) += sprd-scx35l_sp9630ea3mn.dtb
+dtb-$(CONFIG_MACH_SP9630EA4MN) += sprd-scx35l_sp9630ea4mn.dtb
+dtb-$(CONFIG_MACH_SP9830AEA_5M_H100) += sprd-scx35l_sp9830aea_5m_h100.dtb
+dtb-$(CONFIG_MACH_SP9830AEA_PAD_H100) += sprd-scx35l_sp9830aea_pad_h100.dtb
+dtb-$(CONFIG_MACH_SP9830AED_5M_H100) += sprd-scx35l_sp9830aed_5m_h100.dtb
+dtb-$(CONFIG_MACH_SP9830AEA_5M_H100_32V4) += sprd-scx35l_sp9830aea_5m_h100_32v4.dtb
+dtb-$(CONFIG_MACH_SP9830A_7H10) += sprd-scx35l_sp9830a_7h10.dtb
+dtb-$(CONFIG_MACH_SP9830A_7H10_VOLTE) += sprd-scx35l_sp9830a_7h10_volte.dtb
+dtb-$(CONFIG_MACH_SP9830AED_5M_H100) += sprd-scx35l_sp9830aed_5m_h100.dtb
+dtb-$(CONFIG_MACH_SP9830AEA_5M_VOLTE) += sprd-scx35l_sp9830aea_5m_volte.dtb
+dtb-$(CONFIG_MACH_SP9830AEB_5M_H100) += sprd-scx35l_sp9830aeb_5m_h100.dtb
+dtb-$(CONFIG_MACH_SP9830A_5H10_5MVOLTE) += sprd-scx35l_sp9830a_5h10_5mvolte.dtb
+ifeq ($(CONFIG_PRODUCT_SP9830AEC_4M_H110),y)
+dtb-$(CONFIG_MACH_SP9830AEC_4M_H100) += sprd-scx35l_sp9830aec_4m_h110.dtb
+else
+dtb-$(CONFIG_MACH_SP9830A_2H10_4M) += sprd-scx35l_sp9830a_2h10_4m.dtb
+endif
+dtb-$(CONFIG_MACH_SP9830IEA_5M_H100) += sprd-scx35l_sp9830iea_5m_h100.dtb
+              
+ifeq ($(CONFIG_MACH_SP9832A_2H11_4MSAMSUNG), y)
+dtb-$(CONFIG_MACH_SP9832A_2H11_4M) += sprd-scx35l_sp9832a_2h11_4msamsung.dtb
+else
+dtb-$(CONFIG_MACH_SP9832A_2H11_4M) += sprd-scx35l_sp9832a_2h11_4m.dtb
+endif
+
+# The code is so ugly but we have no other good method to distinguish different configuration of DTS.
+# Bcause this project will support HD LCD and FWVGA LCD, the codes writes in DTS.
+ifeq ($(CHIPRAM_CONFIG_PRODUCT), SP9832A_2H11_32V4_VOLTE)
+dtb-$(CONFIG_MACH_SP9832A_2H11_VOLTE) += sprd-scx35l_sp9832a_2h11_32v4_volte.dtb
+else
+dtb-$(CONFIG_MACH_SP9832A_2H11_VOLTE) += sprd-scx35l_sp9832a_2h11_volte.dtb
+endif
+dtb-$(CONFIG_MACH_SP9830I_J3LTE) += sprd-scx35l_sp9830i_j3lte.dtb
+ifeq ($(CONFIG_MACH_SP9830I_J2LTE_V0), y)
+dtb-$(CONFIG_MACH_SP9830I_J2LTE_V0) += sprd-scx35l_sp9830i_j2lte_v0.dtb
+else
+dtb-$(CONFIG_MACH_SP9830I_J2LTE) += sprd-scx35l_sp9830i_j2lte.dtb
+endif
+dtb-$(CONFIG_MACH_SHARKLC_Z2LTE) += sprd-scx35l_sharklc_z2lte.dtb
+dtb-$(CONFIG_MACH_SP9832A_3H10_VOLTE) += sprd-scx35l_sp9832a_3h10_volte.dtb
+dtb-$(CONFIG_MACH_SP9830I_2H11_4M) += sprd-scx35l_sp9830i_2h11_4m.dtb
+dtb-$(CONFIG_MACH_SP9830IEA_4M_H100) += sprd-scx35l_sp9830iea_4m_h100.dtb
+dtb-$(CONFIG_MACH_SP9820FPGA) += sprd-scx35l_sp9820fpga.dtb
+dtb-$(CONFIG_MACH_SP9820EA) += sprd-scx35l_sp9820ea.dtb
+dtb-$(CONFIG_MACH_TSHARK2TABE) += sprd-scx35_tshark2tabe.dtb
+dtb-$(CONFIG_MACH_GRANDPRIMEVE3G) += sprd-scx35_grandprimeve3g.dtb \
+				sprd-scx35_grandprimeve3g_rev00.dtb
+dtb-$(CONFIG_MACH_GTEL3G) += sprd-scx35_gtel3g.dtb
+dtb-$(CONFIG_MACH_GRANDPRIME3G_VE) += sprd-scx35_grandprime3g_ve.dtb
+dtb-$(CONFIG_MACH_GRANDPRIME_DTV) += sprd-scx35_grandprime_dtv.dtb
+dtb-$(CONFIG_MACH_COREPRIME3G_VE) += sprd-scx35_coreprime3g_ve.dtb
+dtb-$(CONFIG_MACH_COREPRIMEVE3G) += sprd-scx35_coreprimeve3g.dtb
+dtb-$(CONFIG_MACH_SP7731CEA) += sprd-scx20_sp7731cea.dtb
+dtb-$(CONFIG_MACH_SP7731CEB) += sprd-scx20_sp7731ceb.dtb
+dtb-$(CONFIG_MACH_SP77i27SEEB_PRIME) += sprd-scx20_sp7727seeb_prime.dtb
+
+DTB_NAMES := $(subst $\",,$(CONFIG_BUILD_ARM_APPENDED_DTB_IMAGE_NAMES))
+ifneq ($(DTB_NAMES),)
+DTB_LIST := $(addsuffix .dtb,$(DTB_NAMES))
+else
+DTB_LIST := $(dtb-y)
+endif
+
 targets += dtbs
 targets += $(dtb-y)
 endif

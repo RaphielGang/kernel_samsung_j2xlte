@@ -66,8 +66,11 @@ static struct mutex gov_lock;
 /* Target load.  Lower values result in higher CPU speeds. */
 #define DEFAULT_TARGET_LOAD 90
 static unsigned int default_target_loads[] = {DEFAULT_TARGET_LOAD};
-
+#if defined CONFIG_ARCH_WHALE || defined (CONFIG_MACH_SP9832A_2H11_VOLTE) || defined (CONFIG_MACH_SP9832A_3H10_VOLTE)
+#define DEFAULT_TIMER_RATE (100 * USEC_PER_MSEC)
+#else
 #define DEFAULT_TIMER_RATE (20 * USEC_PER_MSEC)
+#endif
 #define DEFAULT_ABOVE_HISPEED_DELAY DEFAULT_TIMER_RATE
 static unsigned int default_above_hispeed_delay[] = {
 	DEFAULT_ABOVE_HISPEED_DELAY };

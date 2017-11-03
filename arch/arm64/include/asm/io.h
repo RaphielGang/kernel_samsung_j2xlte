@@ -28,6 +28,81 @@
 #include <asm/pgtable.h>
 #include <asm/early_ioremap.h>
 
+#ifdef CONFIG_SPRD_DEBUG
+#include <linux/regs_debug.h>
+/*copy 3 line codes below for pass compile*/
+#define __jiffy_data  __attribute__((section(".data")))
+extern u64 __jiffy_data jiffies_64;
+extern unsigned long volatile __jiffy_data jiffies;
+
+extern struct sprd_debug_regs_access *sprd_debug_last_regs_access;
+/*
+ * Generic IO read/write.  These perform native-endian accesses.
+ */
+static inline void __raw_writeb(u8 val, volatile void __iomem *addr)
+{
+	sprd_debug_regs_write_start(val, addr);
+	asm volatile("strb %w0, [%1]" : : "r" (val), "r" (addr));
+	sprd_debug_regs_access_done();
+}
+
+static inline void __raw_writew(u16 val, volatile void __iomem *addr)
+{
+	sprd_debug_regs_write_start(val, addr);
+	asm volatile("strh %w0, [%1]" : : "r" (val), "r" (addr));
+	sprd_debug_regs_access_done();
+}
+
+static inline void __raw_writel(u32 val, volatile void __iomem *addr)
+{
+	sprd_debug_regs_write_start(val, addr);
+	asm volatile("str %w0, [%1]" : : "r" (val), "r" (addr));
+	sprd_debug_regs_access_done();
+}
+
+static inline void __raw_writeq(u64 val, volatile void __iomem *addr)
+{
+	sprd_debug_regs_write_start(val, addr);
+	asm volatile("str %0, [%1]" : : "r" (val), "r" (addr));
+	sprd_debug_regs_access_done();
+}
+
+static inline u8 __raw_readb(const volatile void __iomem *addr)
+{
+	u8 val;
+	sprd_debug_regs_read_start(addr);
+	asm volatile("ldrb %w0, [%1]" : "=r" (val) : "r" (addr));
+	sprd_debug_regs_access_done();
+	return val;
+}
+
+static inline u16 __raw_readw(const volatile void __iomem *addr)
+{
+	u16 val;
+	sprd_debug_regs_read_start(addr);
+	asm volatile("ldrh %w0, [%1]" : "=r" (val) : "r" (addr));
+	sprd_debug_regs_access_done();
+	return val;
+}
+
+static inline u32 __raw_readl(const volatile void __iomem *addr)
+{
+	u32 val;
+	sprd_debug_regs_read_start(addr);
+	asm volatile("ldr %w0, [%1]" : "=r" (val) : "r" (addr));
+	sprd_debug_regs_access_done();
+	return val;
+}
+
+static inline u64 __raw_readq(const volatile void __iomem *addr)
+{
+	u64 val;
+	sprd_debug_regs_read_start(addr);
+	asm volatile("ldr %0, [%1]" : "=r" (val) : "r" (addr));
+	sprd_debug_regs_access_done();
+	return val;
+}
+#else
 /*
  * Generic IO read/write.  These perform native-endian accesses.
  */
@@ -78,6 +153,7 @@ static inline u64 __raw_readq(const volatile void __iomem *addr)
 	asm volatile("ldr %0, [%1]" : "=r" (val) : "r" (addr));
 	return val;
 }
+#endif
 
 /* IO barriers */
 #define __iormb()		rmb()

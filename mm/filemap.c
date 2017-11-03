@@ -635,6 +635,12 @@ EXPORT_SYMBOL(end_page_writeback);
  */
 void __lock_page(struct page *page)
 {
+#ifdef CONFIG_SPRD_IODEBUG_IOSCHEDULE
+	if (page->mapping && !((unsigned long)page->mapping & 0x1)){
+		current->lock_on_page = page;
+		current->lock_on_buffer = NULL;
+	}
+#endif
 	DEFINE_WAIT_BIT(wait, &page->flags, PG_locked);
 
 	__wait_on_bit_lock(page_waitqueue(page), &wait, sleep_on_page,
@@ -644,6 +650,12 @@ EXPORT_SYMBOL(__lock_page);
 
 int __lock_page_killable(struct page *page)
 {
+#ifdef CONFIG_SPRD_IODEBUG_IOSCHEDULE
+	if (page->mapping && !((unsigned long)page->mapping & 0x1)){
+		current->lock_on_page = page;
+		current->lock_on_buffer = NULL;
+	}
+#endif
 	DEFINE_WAIT_BIT(wait, &page->flags, PG_locked);
 
 	return __wait_on_bit_lock(page_waitqueue(page), &wait,
@@ -1564,7 +1576,14 @@ static void do_sync_mmap_readahead(struct vm_area_struct *vma,
 	/*
 	 * mmap read-around
 	 */
+#if CONFIG_MMAP_READAROUND_LIMIT == 0
 	ra_pages = max_sane_readahead(ra->ra_pages);
+#else
+	if (ra->ra_pages > CONFIG_MMAP_READAROUND_LIMIT)
+		ra_pages = max_sane_readahead(CONFIG_MMAP_READAROUND_LIMIT);
+	else
+		ra_pages = max_sane_readahead(ra->ra_pages);
+#endif
 	ra->start = max_t(long, 0, offset - ra_pages / 2);
 	ra->size = ra_pages;
 	ra->async_size = ra_pages / 4;
@@ -2281,9 +2300,17 @@ repeat:
 	if (page)
 		goto found;
 
+retry:
 	page = __page_cache_alloc(gfp_mask & ~gfp_notmask);
 	if (!page)
 		return NULL;
+
+	if (is_cma_pageblock(page)) {
+		__free_page(page);
+		gfp_notmask |= __GFP_MOVABLE;
+		goto retry;
+	}
+
 	status = add_to_page_cache_lru(page, mapping, index,
 						GFP_KERNEL & ~gfp_notmask);
 	if (unlikely(status)) {

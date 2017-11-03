@@ -4028,4 +4028,9 @@ unlock:
 
 	return 0;
 }
+
+/* FIXME:
+ * not all module driver enable regulator before use at now,
+ * and system regulators is not fixed, so always_on property is difficult to be set.
+ */
 late_initcall(regulator_init_complete);

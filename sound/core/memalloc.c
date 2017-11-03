@@ -33,7 +33,7 @@
 #include <linux/moduleparam.h>
 #include <linux/mutex.h>
 #include <sound/memalloc.h>
-
+#include <sound/sprd_memcpy_ops.h>
 
 MODULE_AUTHOR("Takashi Iwai <tiwai@suse.de>, Jaroslav Kysela <perex@perex.cz>");
 MODULE_DESCRIPTION("Memory allocator for ALSA system.");
@@ -413,7 +413,7 @@ static ssize_t snd_mem_proc_write(struct file *file, const char __user * buffer,
 
 	if (count > sizeof(buf) - 1)
 		return -EINVAL;
-	if (copy_from_user(buf, buffer, count))
+	if (unalign_copy_from_user(buf, buffer, count))
 		return -EFAULT;
 	buf[count] = '\0';
 

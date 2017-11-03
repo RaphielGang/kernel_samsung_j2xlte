@@ -35,6 +35,22 @@
 
 #include "zram_drv.h"
 
+#define LZO_ALGO_SW  0
+#define LZO_ALGO_HW  1
+
+#ifdef CONFIG_LZO_HW_ALGO
+#define  zram_compress           lzo1x_1_compress_hw
+#define  zram_decompress_safe    lzo1x_decompress_safe_hw
+static uint lzo_algo_type = LZO_ALGO_HW;
+bool lzo_sw_flag;
+#else
+#define  zram_compress           lzo1x_1_compress
+#define  zram_decompress_safe    lzo1x_decompress_safe
+static uint lzo_algo_type = LZO_ALGO_SW;
+#endif
+
+module_param_named(lzo_algo_type, lzo_algo_type, uint, S_IRUGO);
+
 /* Globals */
 static int zram_major;
 struct zram *zram_devices;
@@ -162,7 +178,7 @@ static int zram_decompress_page(struct zram *zram, char *mem, u32 index)
 	if (meta->table[index].size == PAGE_SIZE)
 		memcpy(mem, cmem, PAGE_SIZE);
 	else
-		ret = lzo1x_decompress_safe(cmem, meta->table[index].size,
+		ret = zram_decompress_safe(cmem, meta->table[index].size,
 						mem, &clen);
 	zs_unmap_object(meta->mem_pool, handle);
 
@@ -278,7 +294,7 @@ static int zram_bvec_write(struct zram *zram, struct bio_vec *bvec, u32 index,
 		goto out;
 	}
 
-	ret = lzo1x_1_compress(uncmem, PAGE_SIZE, src, &clen,
+	ret = zram_compress(uncmem, PAGE_SIZE, src, &clen,
 			       meta->compress_workmem);
 
 	if (!is_partial_io(bvec)) {
@@ -288,8 +304,18 @@ static int zram_bvec_write(struct zram *zram, struct bio_vec *bvec, u32 index,
 	}
 
 	if (unlikely(ret != LZO_E_OK)) {
-		pr_err("Compression failed! err=%d\n", ret);
-		goto out;
+#ifdef CONFIG_LZO_HW_ALGO
+		if(ret == LZO_HW_OUT_LEN_ERROR)
+		{
+			clen = PAGE_SIZE;
+			ret =  LZO_E_OK;
+		}
+		else
+#endif
+		{
+			pr_err("Compression failed! err=%d\n", ret);
+			goto out;
+		}
 	}
 
 	if (unlikely(clen > max_zpage_size)) {
@@ -510,9 +536,10 @@ void zram_meta_free(struct zram_meta *meta)
 	kfree(meta);
 }
 
-struct zram_meta *zram_meta_alloc(u64 disksize)
+struct zram_meta *zram_meta_alloc(int device_id, u64 disksize)
 {
 	size_t num_pages;
+	char pool_name[8];
 	struct zram_meta *meta = kmalloc(sizeof(*meta), GFP_KERNEL);
 	if (!meta)
 		goto out;
@@ -535,7 +562,9 @@ struct zram_meta *zram_meta_alloc(u64 disksize)
 		goto free_buffer;
 	}
 
-	meta->mem_pool = zs_create_pool(GFP_NOIO | __GFP_HIGHMEM);
+	snprintf(pool_name, sizeof(pool_name), "zram%d", device_id);
+	meta->mem_pool = zs_create_pool(pool_name, GFP_NOIO | __GFP_HIGHMEM,
+					NULL);
 	if (!meta->mem_pool) {
 		pr_err("Error creating memory pool\n");
 		goto free_table;
@@ -587,9 +616,7 @@ static void zram_slot_free_notify(struct block_device *bdev,
 	struct zram *zram;
 
 	zram = bdev->bd_disk->private_data;
-	down_write(&zram->lock);
 	zram_free_page(zram, index);
-	up_write(&zram->lock);
 	zram_stat64_inc(zram, &zram->stats.notify_free);
 }
 
@@ -597,6 +624,74 @@ static const struct block_device_operations zram_devops = {
 	.swap_slot_free_notify = zram_slot_free_notify,
 	.owner = THIS_MODULE
 };
+
+#ifdef CONFIG_E_SHOW_MEM
+
+static u64 zram_stat64_read(struct zram *zram, u64 *v)
+{
+	u64 val;
+
+	spin_lock(&zram->stat64_lock);
+	val = *v;
+	spin_unlock(&zram->stat64_lock);
+
+	return val;
+}
+
+static int zram_e_show_mem_handler(struct notifier_block *nb,
+				unsigned long val, void *data)
+{
+	int i;
+	u64 size = 0;
+	struct zram *zram = NULL;
+	struct zram_meta *meta;
+	unsigned long *used = data;
+	unsigned long total_used = 0;
+	enum e_show_mem_type type = val;
+
+	printk("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	printk("Enhanced Mem-info :ZRAM\n");
+
+	for (i = 0; i < zram_get_num_devices(); i++) {
+		zram = &zram_devices[i];
+		meta = zram->meta;
+		down_read(&zram->init_lock);
+		if (zram->init_done) {
+			size = zs_get_total_pages(meta->mem_pool) << PAGE_SHIFT;
+			*used += ((unsigned long)size) >> PAGE_SHIFT;
+			total_used += ((unsigned long)size) >> PAGE_SHIFT;
+		}
+		up_read(&zram->init_lock);
+	}
+
+	printk("Detail:\n");
+	for (i = 0; i < zram_get_num_devices(); i++) {
+		zram = &zram_devices[i];
+		meta = zram->meta;
+		if (E_SHOW_MEM_CLASSIC == type || E_SHOW_MEM_ALL == type) {
+			printk("        orig:%lu pages,  %lu kB\n",
+				(unsigned long) zram->stats.pages_stored,
+				(unsigned long)((zram->stats.pages_stored)
+					<< PAGE_SHIFT) / 1024);
+			printk("        compressed:%lu kB\n",
+				(unsigned long)zram_stat64_read(zram,
+					&zram->stats.compr_size) / 1024);
+		}
+
+		if (E_SHOW_MEM_ALL == type) {
+			/* todo: */
+		}
+	}
+
+	printk("Total used:%lu pages, %lu kB\n", total_used,
+		(total_used << PAGE_SHIFT) / 1024);
+	return 0;
+}
+
+static struct notifier_block zram_e_show_mem_notifier = {
+	.notifier_call = zram_e_show_mem_handler,
+};
+#endif
 
 static int create_device(struct zram *zram, int device_id)
 {
@@ -714,9 +809,11 @@ static int __init zram_init(void)
 		if (ret)
 			goto free_devices;
 	}
-
 	pr_info("Created %u device(s) ...\n", num_devices);
 
+#ifdef CONFIG_E_SHOW_MEM
+	register_e_show_mem_notifier(&zram_e_show_mem_notifier);
+#endif
 	return 0;
 
 free_devices:
@@ -746,6 +843,9 @@ static void __exit zram_exit(void)
 	unregister_blkdev(zram_major, "zram");
 
 	kfree(zram_devices);
+#ifdef CONFIG_E_SHOW_MEM
+	unregister_e_show_mem_notifier(&zram_e_show_mem_notifier);
+#endif
 	pr_debug("Cleanup done!\n");
 }
 

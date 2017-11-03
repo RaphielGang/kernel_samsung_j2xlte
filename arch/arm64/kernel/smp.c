@@ -49,9 +49,16 @@
 #include <asm/tlbflush.h>
 #include <asm/ptrace.h>
 
+#ifdef CONFIG_SPRD_DEBUG
+#include <soc/sprd/sprd_debug.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/arm-ipi.h>
 
+#ifdef CONFIG_SEC_DEBUG64
+#include <soc/sprd/sec_debug64.h>
+#endif
 /*
  * as from 2.5, kernels no longer have an init_tasks structure
  * so we need some other way of telling a new secondary core
@@ -65,6 +72,7 @@ enum ipi_msg_type {
 	IPI_CALL_FUNC_SINGLE,
 	IPI_CPU_STOP,
 	IPI_TIMER,
+	IPI_CPU_UP,
 };
 
 /*
@@ -491,6 +499,7 @@ static const char *ipi_types[NR_IPI] = {
 	S(IPI_CALL_FUNC_SINGLE, "Single function call interrupts"),
 	S(IPI_CPU_STOP, "CPU stop interrupts"),
 	S(IPI_TIMER, "Timer broadcast interrupts"),
+	S(IPI_CPU_UP, "hotplug cpu up by ipi"),
 };
 
 void show_ipi_list(struct seq_file *p, int prec)
@@ -523,7 +532,11 @@ static DEFINE_RAW_SPINLOCK(stop_lock);
 /*
  * ipi_cpu_stop - handle IPI from smp_send_stop()
  */
+#ifdef CONFIG_SEC_DEBUG64
+static void ipi_cpu_stop(unsigned int cpu, struct pt_regs *regs)
+#else
 static void ipi_cpu_stop(unsigned int cpu)
+#endif
 {
 	if (system_state == SYSTEM_BOOTING ||
 	    system_state == SYSTEM_RUNNING) {
@@ -538,13 +551,23 @@ static void ipi_cpu_stop(unsigned int cpu)
 	local_fiq_disable();
 	local_irq_disable();
 
+
+	flush_cache_all();
+
+#ifdef CONFIG_SEC_DEBUG64
+	sec_debug_save_context(regs);
+#endif
 	while (1)
 		cpu_relax();
 }
 
+#ifdef CONFIG_SPRD_SYSDUMP
+extern void sysdump_ipi(struct pt_regs *regs);
+#endif
 /*
  * Main handler for inter-processor interrupts
  */
+
 void handle_IPI(int ipinr, struct pt_regs *regs)
 {
 	unsigned int cpu = smp_processor_id();
@@ -553,6 +576,9 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 	if (ipinr >= IPI_RESCHEDULE && ipinr < IPI_RESCHEDULE + NR_IPI)
 		__inc_irq_stat(cpu, ipi_irqs[ipinr - IPI_RESCHEDULE]);
 
+#ifdef CONFIG_SPRD_DEBUG
+        sprd_debug_irq_log(ipinr, handle_IPI, 1);
+#endif
 	switch (ipinr) {
 	case IPI_RESCHEDULE:
 		scheduler_ipi();
@@ -572,7 +598,14 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 
 	case IPI_CPU_STOP:
 		irq_enter();
+#ifdef CONFIG_SPRD_SYSDUMP
+		sysdump_ipi(regs);
+#endif
+#ifdef CONFIG_SEC_DEBUG64
+		ipi_cpu_stop(cpu,regs);
+#else
 		ipi_cpu_stop(cpu);
+#endif
 		irq_exit();
 		break;
 
@@ -582,13 +615,24 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 		tick_receive_broadcast();
 		irq_exit();
 		break;
+	case IPI_CPU_UP:
+		break;
 #endif
 
 	default:
 		pr_crit("CPU%u: Unknown IPI message 0x%x\n", cpu, ipinr);
 		break;
 	}
+#ifdef CONFIG_SPRD_DEBUG
+        sprd_debug_irq_log(ipinr, handle_IPI, 2);
+#endif
 	set_irq_regs(old_regs);
+}
+
+void smp_send_cpuup(int cpu)
+{
+       smp_cross_call(cpumask_of(cpu), IPI_CPU_UP);
+
 }
 
 void smp_send_reschedule(int cpu)

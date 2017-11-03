@@ -125,8 +125,9 @@ void gov_queue_work(struct dbs_data *dbs_data, struct cpufreq_policy *policy,
 {
 	int i;
 
-	if (!policy->governor_enabled)
-		return;
+	mutex_lock(&cpufreq_governor_lock);
+	if (policy->governor_state != CPUFREQ_GOV_START)
+		goto out_unlock;
 
 	if (!all_cpus) {
 		__gov_queue_work(smp_processor_id(), dbs_data, delay);
@@ -134,6 +135,9 @@ void gov_queue_work(struct dbs_data *dbs_data, struct cpufreq_policy *policy,
 		for_each_cpu(i, policy->cpus)
 			__gov_queue_work(i, dbs_data, delay);
 	}
+
+out_unlock:
+	mutex_unlock(&cpufreq_governor_lock);
 }
 EXPORT_SYMBOL_GPL(gov_queue_work);
 
@@ -198,7 +202,6 @@ int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		dbs_data = policy->governor_data;
 	else
 		dbs_data = cdata->gdbs_data;
-
 	WARN_ON(!dbs_data && (event != CPUFREQ_GOV_POLICY_INIT));
 
 	switch (event) {
@@ -312,6 +315,7 @@ int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 			j_cdbs->cur_policy = policy;
 			j_cdbs->prev_cpu_idle = get_cpu_idle_time(j,
 					       &j_cdbs->prev_cpu_wall, io_busy);
+
 			if (ignore_nice)
 				j_cdbs->prev_cpu_nice =
 					kcpustat_cpu(j).cpustat[CPUTIME_NICE];
@@ -359,6 +363,11 @@ int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		break;
 
 	case CPUFREQ_GOV_LIMITS:
+		mutex_lock(&dbs_data->mutex);
+		if (!cpu_cdbs->cur_policy) {
+			mutex_unlock(&dbs_data->mutex);
+			break;
+		}
 		mutex_lock(&cpu_cdbs->timer_mutex);
 		if (policy->max < cpu_cdbs->cur_policy->cur)
 			__cpufreq_driver_target(cpu_cdbs->cur_policy,
@@ -366,8 +375,11 @@ int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		else if (policy->min > cpu_cdbs->cur_policy->cur)
 			__cpufreq_driver_target(cpu_cdbs->cur_policy,
 					policy->min, CPUFREQ_RELATION_L);
+#ifndef CONFIG_CPU_FREQ_GOV_SPRDEMAND
 		dbs_check_cpu(dbs_data, cpu);
+#endif
 		mutex_unlock(&cpu_cdbs->timer_mutex);
+		mutex_unlock(&dbs_data->mutex);
 		break;
 	}
 	return 0;

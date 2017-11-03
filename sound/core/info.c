@@ -32,6 +32,7 @@
 #include <linux/proc_fs.h>
 #include <linux/mutex.h>
 #include <stdarg.h>
+#include <sound/sprd_memcpy_ops.h>
 
 /*
  *
@@ -225,7 +226,7 @@ static ssize_t snd_info_entry_read(struct file *file, char __user *buffer,
 			return 0;
 		size = buf->size - pos;
 		size = min(count, size);
-		if (copy_to_user(buffer, buf->buffer + pos, size))
+		if (unalign_copy_to_user(buffer, buf->buffer + pos, size))
 			return -EFAULT;
 		break;
 	case SNDRV_INFO_CONTENT_DATA:
@@ -275,7 +276,7 @@ static ssize_t snd_info_entry_write(struct file *file, const char __user *buffer
 				return -ENOMEM;
 			}
 		}
-		if (copy_from_user(buf->buffer + pos, buffer, count)) {
+		if (unalign_copy_from_user(buf->buffer + pos, buffer, count)) {
 			mutex_unlock(&entry->access);
 			return -EFAULT;
 		}

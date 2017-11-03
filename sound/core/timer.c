@@ -34,6 +34,7 @@
 #include <sound/minors.h>
 #include <sound/initval.h>
 #include <linux/kmod.h>
+#include <sound/sprd_memcpy_ops.h>
 
 #if defined(CONFIG_SND_HRTIMER) || defined(CONFIG_SND_HRTIMER_MODULE)
 #define DEFAULT_TIMER_LIMIT 4
@@ -1309,7 +1310,7 @@ static int snd_timer_user_next_device(struct snd_timer_id __user *_tid)
 	struct snd_timer *timer;
 	struct list_head *p;
 
-	if (copy_from_user(&id, _tid, sizeof(id)))
+	if (unalign_copy_from_user(&id, _tid, sizeof(id)))
 		return -EFAULT;
 	mutex_lock(&register_mutex);
 	if (id.dev_class < 0) {		/* first item */
@@ -1394,7 +1395,7 @@ static int snd_timer_user_next_device(struct snd_timer_id __user *_tid)
 		}
 	}
 	mutex_unlock(&register_mutex);
-	if (copy_to_user(_tid, &id, sizeof(*_tid)))
+	if (unalign_copy_to_user(_tid, &id, sizeof(*_tid)))
 		return -EFAULT;
 	return 0;
 }
@@ -1435,7 +1436,7 @@ static int snd_timer_user_ginfo(struct file *file,
 		err = -ENODEV;
 	}
 	mutex_unlock(&register_mutex);
-	if (err >= 0 && copy_to_user(_ginfo, ginfo, sizeof(*ginfo)))
+	if (err >= 0 && unalign_copy_to_user(_ginfo, ginfo, sizeof(*ginfo)))
 		err = -EFAULT;
 	kfree(ginfo);
 	return err;
@@ -1448,7 +1449,7 @@ static int snd_timer_user_gparams(struct file *file,
 	struct snd_timer *t;
 	int err;
 
-	if (copy_from_user(&gparams, _gparams, sizeof(gparams)))
+	if (unalign_copy_from_user(&gparams, _gparams, sizeof(gparams)))
 		return -EFAULT;
 	mutex_lock(&register_mutex);
 	t = snd_timer_find(&gparams.tid);
@@ -1478,7 +1479,7 @@ static int snd_timer_user_gstatus(struct file *file,
 	struct snd_timer *t;
 	int err = 0;
 
-	if (copy_from_user(&gstatus, _gstatus, sizeof(gstatus)))
+	if (unalign_copy_from_user(&gstatus, _gstatus, sizeof(gstatus)))
 		return -EFAULT;
 	tid = gstatus.tid;
 	memset(&gstatus, 0, sizeof(gstatus));
@@ -1501,7 +1502,7 @@ static int snd_timer_user_gstatus(struct file *file,
 		err = -ENODEV;
 	}
 	mutex_unlock(&register_mutex);
-	if (err >= 0 && copy_to_user(_gstatus, &gstatus, sizeof(gstatus)))
+	if (err >= 0 && unalign_copy_to_user(_gstatus, &gstatus, sizeof(gstatus)))
 		err = -EFAULT;
 	return err;
 }
@@ -1520,7 +1521,7 @@ static int snd_timer_user_tselect(struct file *file,
 		snd_timer_close(tu->timeri);
 		tu->timeri = NULL;
 	}
-	if (copy_from_user(&tselect, _tselect, sizeof(tselect))) {
+	if (unalign_copy_from_user(&tselect, _tselect, sizeof(tselect))) {
 		err = -EFAULT;
 		goto __err;
 	}
@@ -1587,7 +1588,7 @@ static int snd_timer_user_info(struct file *file,
 	strlcpy(info->id, t->id, sizeof(info->id));
 	strlcpy(info->name, t->name, sizeof(info->name));
 	info->resolution = t->hw.resolution;
-	if (copy_to_user(_info, info, sizeof(*_info)))
+	if (unalign_copy_to_user(_info, info, sizeof(*_info)))
 		err = -EFAULT;
 	kfree(info);
 	return err;
@@ -1609,7 +1610,7 @@ static int snd_timer_user_params(struct file *file,
 	t = tu->timeri->timer;
 	if (!t)
 		return -EBADFD;
-	if (copy_from_user(&params, _params, sizeof(params)))
+	if (unalign_copy_from_user(&params, _params, sizeof(params)))
 		return -EFAULT;
 	if (!(t->hw.flags & SNDRV_TIMER_HW_SLAVE) && params.ticks < 1) {
 		err = -EINVAL;
@@ -1690,7 +1691,7 @@ static int snd_timer_user_params(struct file *file,
 	tu->ticks = params.ticks;
 	err = 0;
  _end:
-	if (copy_to_user(_params, &params, sizeof(params)))
+	if (unalign_copy_to_user(_params, &params, sizeof(params)))
 		return -EFAULT;
 	return err;
 }
@@ -1712,7 +1713,7 @@ static int snd_timer_user_status(struct file *file,
 	spin_lock_irq(&tu->qlock);
 	status.queue = tu->qused;
 	spin_unlock_irq(&tu->qlock);
-	if (copy_to_user(_status, &status, sizeof(status)))
+	if (unalign_copy_to_user(_status, &status, sizeof(status)))
 		return -EFAULT;
 	return 0;
 }
@@ -1880,13 +1881,13 @@ static ssize_t snd_timer_user_read(struct file *file, char __user *buffer,
 			goto _error;
 
 		if (tu->tread) {
-			if (copy_to_user(buffer, &tu->tqueue[tu->qhead++],
+			if (unalign_copy_to_user(buffer, &tu->tqueue[tu->qhead++],
 					 sizeof(struct snd_timer_tread))) {
 				err = -EFAULT;
 				goto _error;
 			}
 		} else {
-			if (copy_to_user(buffer, &tu->queue[tu->qhead++],
+			if (unalign_copy_to_user(buffer, &tu->queue[tu->qhead++],
 					 sizeof(struct snd_timer_read))) {
 				err = -EFAULT;
 				goto _error;

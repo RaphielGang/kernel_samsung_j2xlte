@@ -18,12 +18,12 @@ this byte for application use, with the following caveats:
 	    parameters containing user virtual addresses *must* have
 	    their top byte cleared before trapping to the kernel.
 
-	(2) Non-zero tags are not preserved when delivering signals.
-	    This means that signal handlers in applications making use
-	    of tags cannot rely on the tag information for user virtual
-	    addresses being maintained for fields inside siginfo_t.
-	    One exception to this rule is for signals raised in response
-	    to watchpoint debug exceptions, where the tag information
+	(2) Tags are not guaranteed to be preserved when delivering
+	    signals. This means that signal handlers in applications
+	    making use of tags cannot rely on the tag information for
+	    user virtual addresses being maintained for fields inside
+	    siginfo_t. One exception to this rule is for signals raised
+	    in response to debug exceptions, where the tag information
 	    will be preserved.
 
 	(3) Special care should be taken when using tagged pointers,

@@ -22,6 +22,10 @@
 		/* fiq stack: r0-r15,cpsr,spsr of interrupted mode */
 
 ENTRY(fiq_glue)
+#ifdef CONFIG_SPRD_WATCHDOG_SYS_FIQ
+		msr	spsr_cxsf, #(SVC_MODE | PSR_I_BIT | PSR_F_BIT)
+		movs pc, r8 /* inline the fiq */
+#else
 		/* store pc, cpsr from previous mode, reserve space for spsr */
 		mrs	r12, spsr
 		sub	lr, lr, #4
@@ -100,6 +104,7 @@ nested_fiq:
 		orr	r12, r12, #(PSR_F_BIT)
 		b	exit_fiq
 
+#endif
 fiq_glue_end:
 
 ENTRY(fiq_glue_setup) /* func, data, sp, smc call number */

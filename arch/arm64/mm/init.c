@@ -41,6 +41,11 @@
 
 #include "mm.h"
 
+#ifdef CONFIG_SPRD_IQ
+#include <soc/sprd/board.h>
+#define SPRD_IQ_MEM_ALIGN 0x8
+#endif
+
 static unsigned long phys_initrd_start __initdata = 0;
 static unsigned long phys_initrd_size __initdata = 0;
 
@@ -143,6 +148,32 @@ static void arm64_memory_present(void)
 }
 #endif
 
+#ifdef CONFIG_SPRD_IQ
+static phys_addr_t s_iq_addr = ~0x0;
+
+int in_iqmode(void);
+
+int __init __sprd_iq_memblock(void)
+{
+	phys_addr_t ma_addr = 0;
+
+	if(!in_iqmode())return -EINVAL;
+
+	ma_addr = memblock_alloc(SPRD_IQ_SIZE, SPRD_IQ_MEM_ALIGN);
+	if(ma_addr) {
+		s_iq_addr = ma_addr;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+phys_addr_t sprd_iq_addr(void)
+{
+	return s_iq_addr;
+}
+#endif
+
 void __init arm64_memblock_init(void)
 {
 	u64 *reserve_map, base, size;
@@ -188,6 +219,13 @@ void __init arm64_memblock_init(void)
 	if (IS_ENABLED(CONFIG_ZONE_DMA))
 		dma_phys_limit = max_zone_dma_phys();
 	dma_contiguous_reserve(dma_phys_limit);
+
+	/*reserve mem for iq if in iq mode */
+#ifdef CONFIG_SPRD_IQ
+	if( 0 != __sprd_iq_memblock()){
+		printk("Fail to reserve mem for sprd iq.\n");
+	}
+#endif
 
 	memblock_allow_resize();
 	memblock_dump_all();

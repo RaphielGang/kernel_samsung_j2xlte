@@ -15,6 +15,7 @@ obj-y				+= pwm/
 obj-$(CONFIG_PCI)		+= pci/
 obj-$(CONFIG_PARISC)		+= parisc/
 obj-$(CONFIG_RAPIDIO)		+= rapidio/
+obj-y				+= mfd/
 obj-y				+= video/
 obj-y				+= idle/
 
@@ -55,7 +56,7 @@ obj-$(CONFIG_FB_I810)           += video/i810/
 obj-$(CONFIG_FB_INTEL)          += video/intelfb/
 
 obj-$(CONFIG_PARPORT)		+= parport/
-obj-y				+= base/ block/ misc/ mfd/ nfc/
+obj-y				+= base/ block/ misc/
 obj-$(CONFIG_NUBUS)		+= nubus/
 obj-y				+= macintosh/
 obj-$(CONFIG_IDE)		+= ide/
@@ -96,6 +97,7 @@ obj-$(CONFIG_PPS)		+= pps/
 obj-$(CONFIG_PTP_1588_CLOCK)	+= ptp/
 obj-$(CONFIG_W1)		+= w1/
 obj-$(CONFIG_POWER_SUPPLY)	+= power/
+obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery/
 obj-$(CONFIG_HWMON)		+= hwmon/
 obj-$(CONFIG_THERMAL)		+= thermal/
 obj-$(CONFIG_WATCHDOG)		+= watchdog/
@@ -107,6 +109,7 @@ obj-$(CONFIG_EDAC)		+= edac/
 obj-$(CONFIG_EISA)		+= eisa/
 obj-y				+= lguest/
 obj-$(CONFIG_CPU_FREQ)		+= cpufreq/
+obj-$(CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG)	+=cpuhotplug/
 obj-$(CONFIG_CPU_IDLE)		+= cpuidle/
 obj-y				+= mmc/
 obj-$(CONFIG_MEMSTICK)		+= memstick/
@@ -132,10 +135,17 @@ obj-$(CONFIG_VHOST_RING)	+= vhost/
 obj-$(CONFIG_VLYNQ)		+= vlynq/
 obj-$(CONFIG_STAGING)		+= staging/
 obj-y				+= platform/
+
+#need add autotst in whale later
+ifndef CONFIG_ARCH_WHALE
+obj-y	+= autotst/
+endif
+
 #common clk code
 obj-y				+= clk/
 
 obj-$(CONFIG_MAILBOX)		+= mailbox/
+obj-$(CONFIG_MCDT)              += mcdt/
 obj-$(CONFIG_HWSPINLOCK)	+= hwspinlock/
 obj-$(CONFIG_NFC)		+= nfc/
 obj-$(CONFIG_IOMMU_SUPPORT)	+= iommu/
@@ -154,5 +164,16 @@ obj-$(CONFIG_VME_BUS)		+= vme/
 obj-$(CONFIG_IPACK_BUS)		+= ipack/
 obj-$(CONFIG_NTB)		+= ntb/
 
+ifdef CONFIG_SIPC_V2
+obj-$(CONFIG_SIPC_V2)		+= sipc/sipc2/
+else
+obj-$(CONFIG_SIPC)		+= sipc/
+endif
+
+obj-$(CONFIG_SENSORS)           += sensor/
+
+obj-$(CONFIG_SPRD_IQ)           += iq/
+
 obj-$(CONFIG_GATOR)		+= gator/
 obj-$(CONFIG_CORESIGHT)		+= coresight/
+obj-$(CONFIG_TEE_SUPPORT)	+= tee/

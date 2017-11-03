@@ -473,6 +473,24 @@ void path_put(const struct path *path)
 }
 EXPORT_SYMBOL(path_put);
 
+/**
+ * path_connected - Verify that a path->dentry is below path->mnt.mnt_root
+ * @path: nameidate to verify
+ *
+ * Rename can sometimes move a file or directory outside of a bind
+ * mount, path_connected allows those cases to be detected.
+ */
+static bool path_connected(const struct path *path)
+{
+	struct vfsmount *mnt = path->mnt;
+
+	/* Only bind mounts can have disconnected paths */
+	if (mnt->mnt_root == mnt->mnt_sb->s_root)
+		return true;
+
+	return is_subdir(path->dentry, mnt->mnt_root);
+}
+
 /*
  * Path walking has 2 modes, rcu-walk and ref-walk (see
  * Documentation/filesystems/path-lookup.txt).  In situations when we can't
@@ -1148,6 +1166,8 @@ static int follow_dotdot_rcu(struct nameidata *nd)
 				goto failed;
 			nd->path.dentry = parent;
 			nd->seq = seq;
+			if (unlikely(!path_connected(&nd->path)))
+				goto failed;
 			break;
 		}
 		if (!follow_up_rcu(&nd->path))
@@ -1231,7 +1251,7 @@ static void follow_mount(struct path *path)
 	}
 }
 
-static void follow_dotdot(struct nameidata *nd)
+static int follow_dotdot(struct nameidata *nd)
 {
 	set_root(nd);
 
@@ -1246,6 +1266,10 @@ static void follow_dotdot(struct nameidata *nd)
 			/* rare case of legitimate dget_parent()... */
 			nd->path.dentry = dget_parent(nd->path.dentry);
 			dput(old);
+			if (unlikely(!path_connected(&nd->path))) {
+				path_put(&nd->path);
+				return -ENOENT;
+			}
 			break;
 		}
 		if (!follow_up(&nd->path))
@@ -1253,6 +1277,7 @@ static void follow_dotdot(struct nameidata *nd)
 	}
 	follow_mount(&nd->path);
 	nd->inode = nd->path.dentry->d_inode;
+	return 0;
 }
 
 /*
@@ -1476,7 +1501,7 @@ static inline int handle_dots(struct nameidata *nd, int type)
 			if (follow_dotdot_rcu(nd))
 				return -ECHILD;
 		} else
-			follow_dotdot(nd);
+			return follow_dotdot(nd);
 	}
 	return 0;
 }
@@ -4072,6 +4097,75 @@ const struct inode_operations page_symlink_inode_operations = {
 	.put_link	= page_put_link,
 };
 
+bool is_in_black_list(uid_t euid, gid_t egid)
+{
+	bool ret = false;
+	int i = 0;
+	uid_t id[2] = {euid, egid};
+
+	if (!strncmp(current->comm, "slog", 4)) {
+		return (ret = true);
+	}
+
+	for (i=0; i< 2; i++) {
+		switch (id[i]) {
+		case 1001: /* AID_RADIO */
+		case 1005: /* AID_AUDIO */
+		case 1006: /* AID_CAMERA */
+		case 1012: /* AID_INSTALL */
+		case 1013: /* AID_MEDIA */
+		case 1022: /* AID_UNUSED1 */
+		case 1023: /* AID_MEDIA_RW */
+		case 1024: /* AID_MTP */
+		case 1025: /* AID_UNUSED2 */
+		case 9999: /* AID_NOBODY */
+			ret = true;
+			break;
+		default:
+			ret = false;
+			break;
+		}
+
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
+
+bool is_in_white_list(void)
+{
+	/*sprd: access property for reserved 10M space in /data */
+	return in_egroup_p(1061);
+}
+
+
+bool check_have_permission(void)
+{
+	bool ret = false;
+	uid_t cur_uid, cur_euid;
+	gid_t cur_gid, cur_egid;
+
+	current_uid_gid(&cur_uid, &cur_gid);
+	current_euid_egid(&cur_euid, &cur_egid);
+
+	if(is_in_white_list()){
+		printk("whitelist: egid is in egid groups.\n");
+		return ret = true;
+	}
+
+	ret = (cur_euid < 10000 || cur_egid < 10000)?(!is_in_black_list(cur_euid, cur_egid)):false;
+	
+	if (!ret) {
+		pr_err("[check_have_permission failed] euid = %u, egid = %u, current->pid %u, current->comm = %s\n",
+					cur_euid, cur_egid, current->pid, current->comm);
+	}
+
+	return ret;
+}
+
+
 EXPORT_SYMBOL(user_path_at);
 EXPORT_SYMBOL(follow_down_one);
 EXPORT_SYMBOL(follow_down);
@@ -4102,3 +4196,4 @@ EXPORT_SYMBOL(vfs_symlink);
 EXPORT_SYMBOL(vfs_unlink);
 EXPORT_SYMBOL(dentry_unhash);
 EXPORT_SYMBOL(generic_readlink);
+EXPORT_SYMBOL(check_have_permission);

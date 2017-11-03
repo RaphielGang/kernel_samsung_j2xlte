@@ -27,7 +27,7 @@
 #include <linux/shrinker.h>
 #include <linux/types.h>
 #include <linux/device.h>
-
+#include <linux/sprd_iommu.h>
 #include "ion.h"
 
 struct ion_buffer *ion_handle_buffer(struct ion_handle *handle);
@@ -80,11 +80,15 @@ struct ion_buffer {
 	int dmap_cnt;
 	struct sg_table *sg_table;
 	struct page **pages;
+	int iomap_cnt[IOMMU_MAX];
+	unsigned long iova[IOMMU_MAX];
 	struct list_head vmas;
 	/* used to track orphaned buffers */
 	int handle_count;
 	char task_comm[TASK_COMM_LEN];
 	pid_t pid;
+	pid_t tid;
+	struct timeval alloc_time;
 };
 void ion_buffer_destroy(struct ion_buffer *buffer);
 
@@ -324,7 +328,7 @@ void ion_carveout_heap_destroy(struct ion_heap *);
 
 struct ion_heap *ion_chunk_heap_create(struct ion_platform_heap *);
 void ion_chunk_heap_destroy(struct ion_heap *);
-struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *);
+struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *, struct device *);
 void ion_cma_heap_destroy(struct ion_heap *);
 
 /**

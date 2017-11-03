@@ -654,14 +654,23 @@ static ssize_t proc_info_read(struct file * file, char __user * buf,
 		count = PROC_BLOCK_SIZE;
 
 	length = -ENOMEM;
+#ifndef CONFIG_SPRD_PAGERECORDER
 	if (!(page = __get_free_page(GFP_TEMPORARY)))
 		goto out;
+#else
+	if (!(page = __get_free_page_nopagedebug(GFP_TEMPORARY)))
+		goto out;
+#endif
 
 	length = PROC_I(inode)->op.proc_read(task, (char*)page);
 
 	if (length >= 0)
 		length = simple_read_from_buffer(buf, count, ppos, (char *)page, length);
+#ifndef CONFIG_SPRD_PAGERECORDER
 	free_page(page);
+#else
+	free_page_nopagedebug(page);
+#endif
 out:
 	put_task_struct(task);
 out_no_task:
@@ -986,6 +995,9 @@ static ssize_t oom_adj_write(struct file *file, const char __user *buf,
 		err = -EACCES;
 		goto err_sighand;
 	}
+
+	/*ace add for monkey process oom_adj*/
+	if(!strncmp("commands.monkey", current->comm, 15)) oom_adj = -16;
 
 	/*
 	 * /proc/pid/oom_adj is provided for legacy purposes, ask users to use
@@ -2760,6 +2772,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 #ifdef CONFIG_PROC_PAGE_MONITOR
 	REG("clear_refs", S_IWUSR, proc_clear_refs_operations),
 	REG("smaps",      S_IRUGO, proc_pid_smaps_operations),
+	REG("smaps_simple", S_IRUGO, proc_pid_smaps_simple_operations),
 	REG("pagemap",    S_IRUGO, proc_pagemap_operations),
 #endif
 #ifdef CONFIG_SECURITY

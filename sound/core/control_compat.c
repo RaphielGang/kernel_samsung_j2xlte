@@ -22,6 +22,8 @@
 
 #include <linux/compat.h>
 #include <linux/slab.h>
+#include <sound/sprd_memcpy_ops.h>
+
 
 struct snd_ctl_elem_list32 {
 	u32 offset;
@@ -103,7 +105,7 @@ static int snd_ctl_elem_info_compat(struct snd_ctl_file *ctl,
 
 	err = -EFAULT;
 	/* copy id */
-	if (copy_from_user(&data->id, &data32->id, sizeof(data->id)))
+	if (unalign_copy_from_user(&data->id, &data32->id, sizeof(data->id)))
 		goto error;
 	/* we need to copy the item index.
 	 * hope this doesn't break anything..
@@ -122,8 +124,8 @@ static int snd_ctl_elem_info_compat(struct snd_ctl_file *ctl,
 	/* restore info to 32bit */
 	err = -EFAULT;
 	/* id, type, access, count */
-	if (copy_to_user(&data32->id, &data->id, sizeof(data->id)) ||
-	    copy_to_user(&data32->type, &data->type, 3 * sizeof(u32)))
+	if (unalign_copy_to_user(&data32->id, &data->id, sizeof(data->id)) ||
+	    unalign_copy_to_user(&data32->type, &data->type, 3 * sizeof(u32)))
 		goto error;
 	if (put_user(data->owner, &data32->owner))
 		goto error;
@@ -136,13 +138,13 @@ static int snd_ctl_elem_info_compat(struct snd_ctl_file *ctl,
 			goto error;
 		break;
 	case SNDRV_CTL_ELEM_TYPE_INTEGER64:
-		if (copy_to_user(&data32->value.integer64,
+		if (unalign_copy_to_user(&data32->value.integer64,
 				 &data->value.integer64,
 				 sizeof(data->value.integer64)))
 			goto error;
 		break;
 	case SNDRV_CTL_ELEM_TYPE_ENUMERATED:
-		if (copy_to_user(&data32->value.enumerated,
+		if (unalign_copy_to_user(&data32->value.enumerated,
 				 &data->value.enumerated,
 				 sizeof(data->value.enumerated)))
 			goto error;
@@ -226,7 +228,7 @@ static int copy_ctl_value_from_user(struct snd_card *card,
 	int uninitialized_var(count);
 	unsigned int indirect;
 
-	if (copy_from_user(&data->id, &data32->id, sizeof(data->id)))
+	if (unalign_copy_from_user(&data->id, &data32->id, sizeof(data->id)))
 		return -EFAULT;
 	if (get_user(indirect, &data32->indirect))
 		return -EFAULT;
@@ -250,7 +252,7 @@ static int copy_ctl_value_from_user(struct snd_card *card,
 			printk(KERN_ERR "snd_ioctl32_ctl_elem_value: unknown type %d\n", type);
 			return -EINVAL;
 		}
-		if (copy_from_user(data->value.bytes.data,
+		if (unalign_copy_from_user(data->value.bytes.data,
 				   data32->value.data, size))
 			return -EFAULT;
 	}
@@ -277,7 +279,7 @@ static int copy_ctl_value_to_user(struct snd_ctl_elem_value32 __user *data32,
 		}
 	} else {
 		size = get_elem_size(type, count);
-		if (copy_to_user(data32->value.data,
+		if (unalign_copy_to_user(data32->value.data,
 				 data->value.bytes.data, size))
 			return -EFAULT;
 	}
@@ -349,8 +351,8 @@ static int snd_ctl_elem_add_compat(struct snd_ctl_file *file,
 
 	err = -EFAULT;
 	/* id, type, access, count */ \
-	if (copy_from_user(&data->id, &data32->id, sizeof(data->id)) ||
-	    copy_from_user(&data->type, &data32->type, 3 * sizeof(u32)))
+	if (unalign_copy_from_user(&data->id, &data32->id, sizeof(data->id)) ||
+	    unalign_copy_from_user(&data->type, &data32->type, 3 * sizeof(u32)))
 		goto error;
 	if (get_user(data->owner, &data32->owner) ||
 	    get_user(data->type, &data32->type))
@@ -364,13 +366,13 @@ static int snd_ctl_elem_add_compat(struct snd_ctl_file *file,
 			goto error;
 		break;
 	case SNDRV_CTL_ELEM_TYPE_INTEGER64:
-		if (copy_from_user(&data->value.integer64,
+		if (unalign_copy_from_user(&data->value.integer64,
 				   &data32->value.integer64,
 				   sizeof(data->value.integer64)))
 			goto error;
 		break;
 	case SNDRV_CTL_ELEM_TYPE_ENUMERATED:
-		if (copy_from_user(&data->value.enumerated,
+		if (unalign_copy_from_user(&data->value.enumerated,
 				   &data32->value.enumerated,
 				   sizeof(data->value.enumerated)))
 			goto error;

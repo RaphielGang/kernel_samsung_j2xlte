@@ -1265,7 +1265,11 @@ static inline struct page *alloc_slab_page(gfp_t flags, int node,
 	flags |= __GFP_NOTRACK;
 
 	if (node == NUMA_NO_NODE)
+#ifndef CONFIG_SPRD_PAGERECORDER
 		return alloc_pages(flags, order);
+#else
+		return alloc_pages_nopagedebug(flags, order);
+#endif
 	else
 		return alloc_pages_exact_node(node, flags, order);
 }
@@ -1287,7 +1291,8 @@ static struct page *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 	 * Let the initial higher-order allocation fail under memory pressure
 	 * so we fall-back to the minimum order allocation.
 	 */
-	alloc_gfp = (flags | __GFP_NOWARN | __GFP_NORETRY) & ~__GFP_NOFAIL;
+	alloc_gfp = (flags | __GFP_NOWARN | __GFP_NORETRY | __GFP_NOMEMALLOC
+			| __GFP_NO_KSWAPD) & ~(__GFP_NOFAIL|__GFP_WAIT);
 
 	page = alloc_slab_page(alloc_gfp, node, oo);
 	if (unlikely(!page)) {
@@ -1412,7 +1417,12 @@ static void __free_slab(struct kmem_cache *s, struct page *page)
 	page_mapcount_reset(page);
 	if (current->reclaim_state)
 		current->reclaim_state->reclaimed_slab += pages;
+
+#ifndef CONFIG_SPRD_PAGERECORDER
 	__free_memcg_kmem_pages(page, order);
+#else
+	__free_memcg_kmem_pages_nopagedebug(page, order);
+#endif
 }
 
 #define need_reserve_slab_rcu						\
@@ -3351,7 +3361,12 @@ void kfree(const void *x)
 	if (unlikely(!PageSlab(page))) {
 		BUG_ON(!PageCompound(page));
 		kmemleak_free(x);
+#ifndef CONFIG_SPRD_PAGERECORDER
 		__free_memcg_kmem_pages(page, compound_order(page));
+#else
+		__free_memcg_kmem_pages_nopagedebug(page,
+			compound_order(page));
+#endif
 		return;
 	}
 	slab_free(page->slab_cache, page, object, _RET_IP_);
@@ -3966,8 +3981,13 @@ struct loc_track {
 static void free_loc_track(struct loc_track *t)
 {
 	if (t->max)
+#ifndef CONFIG_SPRD_PAGERECORDER
 		free_pages((unsigned long)t->loc,
 			get_order(sizeof(struct location) * t->max));
+#else
+		__free_pages_nopagedebug((unsigned long)t->loc,
+			get_order(sizeof(struct location) * t->max));
+#endif
 }
 
 static int alloc_loc_track(struct loc_track *t, unsigned long max, gfp_t flags)
@@ -3977,7 +3997,12 @@ static int alloc_loc_track(struct loc_track *t, unsigned long max, gfp_t flags)
 
 	order = get_order(sizeof(struct location) * max);
 
+#ifndef CONFIG_SPRD_PAGERECORDER
 	l = (void *)__get_free_pages(flags, order);
+#else
+	l = (void *)__get_free_pages_nopagedebug(flags, order);
+#endif
+
 	if (!l)
 		return 0;
 

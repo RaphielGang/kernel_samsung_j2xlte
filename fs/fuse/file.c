@@ -18,6 +18,10 @@
 #include <linux/aio.h>
 #include <linux/falloc.h>
 
+#ifdef CONFIG_SPRD_IODEBUG_VFS
+extern int iodebug_save_vfs_io(int rw, size_t count, struct file *filp, char fuse_flag, unsigned long io_jiffies);
+#endif
+
 static const struct file_operations fuse_direct_io_file_operations;
 
 static int fuse_send_open(struct fuse_conn *fc, u64 nodeid, struct file *file,
@@ -795,6 +799,43 @@ static int fuse_readpages_fill(void *_data, struct page *page)
 		return -EIO;
 	}
 
+#ifdef CONFIG_CMA
+	if (is_cma_pageblock(page)) {
+		struct page *oldpage = page, *newpage;
+		int err;
+
+		/* make sure that old page is not free in-between the calls */
+		page_cache_get(oldpage);
+
+		newpage = alloc_page(GFP_HIGHUSER);
+		if (!newpage) {
+			page_cache_release(oldpage);
+			return -ENOMEM;
+		}
+
+		err = replace_page_cache_page(oldpage, newpage, GFP_KERNEL);
+		if (err) {
+			__free_page(newpage);
+			page_cache_release(oldpage);
+			return err;
+		}
+
+		/*
+		 * Decrement the count on new page to make page cache the only
+		 * owner of it
+		 */
+		lock_page(newpage);
+		put_page(newpage);
+
+		lru_cache_add_file(newpage);
+
+		/* finally release the old page and swap pointers */
+		unlock_page(oldpage);
+		page_cache_release(oldpage);
+		page = newpage;
+	}
+#endif
+
 	page_cache_get(page);
 	req->pages[req->num_pages] = page;
 	req->page_descs[req->num_pages].length = PAGE_SIZE;
@@ -843,7 +884,11 @@ static ssize_t fuse_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 {
 	struct inode *inode = iocb->ki_filp->f_mapping->host;
 	struct fuse_conn *fc = get_fuse_conn(inode);
+	size_t ret;
 
+#ifdef CONFIG_SPRD_IODEBUG_VFS
+	unsigned long jiffies_begin = jiffies;
+#endif
 	/*
 	 * In auto invalidate mode, always update attributes on read.
 	 * Otherwise, only update if we attempt to read past EOF (to ensure
@@ -857,7 +902,15 @@ static ssize_t fuse_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 			return err;
 	}
 
-	return generic_file_aio_read(iocb, iov, nr_segs, pos);
+	ret = generic_file_aio_read(iocb, iov, nr_segs, pos);
+
+#ifdef CONFIG_SPRD_IODEBUG_VFS
+	if (ret > 0) {
+		iodebug_save_vfs_io(0, ret, iocb->ki_filp, 1, (jiffies-jiffies_begin));
+	}
+#endif
+
+	return ret;
 }
 
 static void fuse_write_fill(struct fuse_req *req, struct fuse_file *ff,
@@ -1101,6 +1154,9 @@ static ssize_t fuse_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 
 	WARN_ON(iocb->ki_pos != pos);
 
+#ifdef CONFIG_SPRD_IODEBUG_VFS
+	unsigned long jiffies_begin = jiffies;
+#endif
 	ocount = 0;
 	err = generic_segment_checks(iov, &nr_segs, &ocount, VERIFY_READ);
 	if (err)
@@ -1165,6 +1221,12 @@ static ssize_t fuse_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 out:
 	current->backing_dev_info = NULL;
 	mutex_unlock(&inode->i_mutex);
+
+#ifdef CONFIG_SPRD_IODEBUG_VFS
+	if (written > 0) {
+		iodebug_save_vfs_io(1, written, file, 1, jiffies-jiffies_begin);
+	}
+#endif
 
 	return written ? written : err;
 }

@@ -80,6 +80,29 @@ config ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES
 	  /sys/module/lowmemorykiller/parameters/adj and convert them
 	  to oom_score_adj values.
 
+config OOM_NOTIFIER
+	bool  "Android OOM Notifier"
+	default n
+	help
+	Using a Android-Style oom-killer instead of linux's native OOM_killer.
+
+config SEC_OOM_KILLER
+        bool "Android OOM Killer"
+        default n
+        help
+          klaatu@samsung
+          This enables 'Android-Style oom-killer'
+          The way to select victim by oom-killer provided by
+          linux kernel is totally different from android policy.
+          Hence, it makes more sense that we select the oom victim
+          as android does when LMK is invoked.
+
+config SEC_DEBUG_LMK_MEMINFO
+	bool "Show Meminfo when lmk invoked"
+	default n
+	help
+	  Show memory information when lmk kills process
+
 config ANDROID_INTF_ALARM_DEV
 	bool "Android alarm driver"
 	depends on RTC_CLASS
@@ -119,6 +142,34 @@ config SW_SYNC_USER
 source "drivers/staging/android/ion/Kconfig"
 
 source "drivers/staging/android/fiq_debugger/Kconfig"
+
+config RUNTIME_COMPCACHE
+        bool "Android rtcc"
+        depends on ZRAM && ANDROID
+        default n
+        help
+          This option enables rtcc v3 for android
+
+config POMEMR_RECLAIM
+	bool "page order mem reclaim"
+	depends on ANDROID
+	default n
+	help
+	  This option enables page order memory reclaim
+
+config POMEMR_RECLAIM_FILE
+	bool "page order mem reclaim for file pages"
+	depends on ANDROID && POMEMR_RECLAIM
+	default n
+	help
+	  This option enables page order memory reclaim for file pages
+
+config KSWAPD_NOSWAP
+        bool "Disable swap in kswapd"
+        depends on RUNTIME_COMPCACHE
+        default n
+        help
+          This option controls swap action in kswapd
 
 endif # if ANDROID
 

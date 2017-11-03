@@ -20,6 +20,7 @@
 
 #include "ion.h"
 #include "compat_ion.h"
+#include "sprd/compat_sprd_ion.h"
 
 /* See drivers/staging/android/uapi/ion.h for the definition of these structs */
 struct compat_ion_allocation_data {
@@ -179,14 +180,17 @@ long compat_ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		err = compat_get_ion_custom_data(data32, data);
 		if (err)
 			return err;
-
-		return filp->f_op->unlocked_ioctl(filp, ION_IOC_CUSTOM,
-							(unsigned long)data);
+		if (compat_sprd_ion_ioctl)
+			return compat_sprd_ion_ioctl(filp, data->cmd, data->arg);
+		else
+			return filp->f_op->unlocked_ioctl(filp, ION_IOC_CUSTOM,
+								(unsigned long)data);
 	}
 	case ION_IOC_SHARE:
 	case ION_IOC_MAP:
 	case ION_IOC_IMPORT:
 	case ION_IOC_SYNC:
+	case ION_IOC_INVALIDATE:
 		return filp->f_op->unlocked_ioctl(filp, cmd,
 						(unsigned long)compat_ptr(arg));
 	default:

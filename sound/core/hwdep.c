@@ -30,6 +30,8 @@
 #include <sound/minors.h>
 #include <sound/hwdep.h>
 #include <sound/info.h>
+#include <sound/sprd_memcpy_ops.h>
+
 
 MODULE_AUTHOR("Jaroslav Kysela <perex@perex.cz>");
 MODULE_DESCRIPTION("Hardware dependent layer");
@@ -195,7 +197,7 @@ static int snd_hwdep_info(struct snd_hwdep *hw,
 	strlcpy(info.id, hw->id, sizeof(info.id));	
 	strlcpy(info.name, hw->name, sizeof(info.name));
 	info.iface = hw->iface;
-	if (copy_to_user(_info, &info, sizeof(info)))
+	if (unalign_copy_to_user(_info, &info, sizeof(info)))
 		return -EFAULT;
 	return 0;
 }
@@ -212,7 +214,7 @@ static int snd_hwdep_dsp_status(struct snd_hwdep *hw,
 	info.dsp_loaded = hw->dsp_loaded;
 	if ((err = hw->ops.dsp_status(hw, &info)) < 0)
 		return err;
-	if (copy_to_user(_info, &info, sizeof(info)))
+	if (unalign_copy_to_user(_info, &info, sizeof(info)))
 		return -EFAULT;
 	return 0;
 }
@@ -226,7 +228,7 @@ static int snd_hwdep_dsp_load(struct snd_hwdep *hw,
 	if (! hw->ops.dsp_load)
 		return -ENXIO;
 	memset(&info, 0, sizeof(info));
-	if (copy_from_user(&info, _info, sizeof(info)))
+	if (unalign_copy_from_user(&info, _info, sizeof(info)))
 		return -EFAULT;
 	/* check whether the dsp was already loaded */
 	if (hw->dsp_loaded & (1 << info.index))

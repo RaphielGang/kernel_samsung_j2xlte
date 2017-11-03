@@ -66,6 +66,18 @@ config SDIO_UART
 	  SDIO function driver for SDIO cards that implements the UART
 	  class, as well as the GPS class which appears like a UART.
 
+config SDIO_CHANNEL
+	tristate "SDIO CHANNEL class support"
+	default y
+	help
+	  SDIO function driver for Modem Devices.
+
+config SDIO_CARD
+	tristate "SDIO CARD class runtime support"
+	default n
+	help
+	SDIO card driver for Devices supporting customized runtime.
+
 config MMC_TEST
 	tristate "MMC host test driver"
 	help
@@ -77,3 +89,25 @@ config MMC_TEST
 
 	  This driver is only of interest to those developing or
 	  testing a host driver. Most people should say N here.
+
+config MMC_SUPPORT_BKOPS_MODE
+	tristate "Support the bkops mode of eMMC 5.0"
+	help
+	  Say Y here to enable the bkops mode
+
+config MMC_BKOPS_NODE_UID
+	int "User ID of BKOPS sysfs node"
+	depends on MMC_SUPPORT_BKOPS_MODE
+	default 0
+	help
+	  Owner user ID of BKOPS sysfs node.
+	  Default is 0. Do not touch the value if unsure.
+
+config MMC_BKOPS_NODE_GID
+	int "Group ID of BKOPS sysfs node"
+	depends on MMC_SUPPORT_BKOPS_MODE
+	default 0
+	help
+	  Owner group ID of BKOPS sysfs node.
+	  Default is 0. Do not touch the value if unsure.
+

@@ -68,8 +68,10 @@ static int lzo_decompress(struct crypto_tfm *tfm, const u8 *src,
 
 	err = lzo1x_decompress_safe(src, slen, dst, &tmp_len);
 
-	if (err != LZO_E_OK)
+	if (err != LZO_E_OK) {
+		printk("%s: err = %d\n", __func__, err);
 		return -EINVAL;
+	}
 
 	*dlen = tmp_len;
 	return 0;

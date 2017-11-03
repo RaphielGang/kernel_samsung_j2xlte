@@ -22,6 +22,7 @@
 
 #include <linux/compat.h>
 #include <linux/slab.h>
+#include <sound/sprd_memcpy_ops.h>
 
 static int snd_pcm_ioctl_delay_compat(struct snd_pcm_substream *substream,
 				      s32 __user *src)
@@ -247,7 +248,7 @@ static int snd_pcm_ioctl_hw_params_compat(struct snd_pcm_substream *substream,
 		err = snd_pcm_hw_params(substream, data);
 	if (err < 0)
 		goto error;
-	if (copy_to_user(data32, data, sizeof(*data32)) ||
+	if (unalign_copy_to_user(data32, data, sizeof(*data32)) ||
 	    put_user(data->fifo_size, &data32->fifo_size)) {
 		err = -EFAULT;
 		goto error;

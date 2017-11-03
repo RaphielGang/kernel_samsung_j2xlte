@@ -29,6 +29,7 @@
 #include <sound/minors.h>
 #include <sound/info.h>
 #include <sound/control.h>
+#include <sound/sprd_memcpy_ops.h>
 
 /* max number of user-defined controls */
 #define MAX_USER_CONTROLS	32
@@ -708,7 +709,7 @@ static int snd_ctl_card_info(struct snd_card *card, struct snd_ctl_file * ctl,
 	strlcpy(info->mixername, card->mixername, sizeof(info->mixername));
 	strlcpy(info->components, card->components, sizeof(info->components));
 	up_read(&snd_ioctl_rwsem);
-	if (copy_to_user(arg, info, sizeof(struct snd_ctl_card_info))) {
+	if (unalign_copy_to_user(arg, info, sizeof(struct snd_ctl_card_info))) {
 		kfree(info);
 		return -EFAULT;
 	}
@@ -725,7 +726,7 @@ static int snd_ctl_elem_list(struct snd_card *card,
 	struct snd_ctl_elem_id *dst, *id;
 	unsigned int offset, space, jidx;
 	
-	if (copy_from_user(&list, _list, sizeof(list)))
+	if (unalign_copy_from_user(&list, _list, sizeof(list)))
 		return -EFAULT;
 	offset = list.offset;
 	space = list.space;
@@ -764,7 +765,7 @@ static int snd_ctl_elem_list(struct snd_card *card,
 		}
 		up_read(&card->controls_rwsem);
 		if (list.used > 0 &&
-		    copy_to_user(list.pids, dst,
+		    unalign_copy_to_user(list.pids, dst,
 				 list.used * sizeof(struct snd_ctl_elem_id))) {
 			vfree(dst);
 			return -EFAULT;
@@ -775,7 +776,7 @@ static int snd_ctl_elem_list(struct snd_card *card,
 		list.count = card->controls_count;
 		up_read(&card->controls_rwsem);
 	}
-	if (copy_to_user(_list, &list, sizeof(list)))
+	if (unalign_copy_to_user(_list, &list, sizeof(list)))
 		return -EFAULT;
 	return 0;
 }
@@ -824,7 +825,7 @@ static int snd_ctl_elem_info_user(struct snd_ctl_file *ctl,
 	struct snd_ctl_elem_info info;
 	int result;
 
-	if (copy_from_user(&info, _info, sizeof(info)))
+	if (unalign_copy_from_user(&info, _info, sizeof(info)))
 		return -EFAULT;
 	snd_power_lock(ctl->card);
 	result = snd_power_wait(ctl->card, SNDRV_CTL_POWER_D0);
@@ -832,7 +833,7 @@ static int snd_ctl_elem_info_user(struct snd_ctl_file *ctl,
 		result = snd_ctl_elem_info(ctl, &info);
 	snd_power_unlock(ctl->card);
 	if (result >= 0)
-		if (copy_to_user(_info, &info, sizeof(info)))
+		if (unalign_copy_to_user(_info, &info, sizeof(info)))
 			return -EFAULT;
 	return result;
 }
@@ -879,7 +880,7 @@ static int snd_ctl_elem_read_user(struct snd_card *card,
 		result = snd_ctl_elem_read(card, control);
 	snd_power_unlock(card);
 	if (result >= 0)
-		if (copy_to_user(_control, control, sizeof(*control)))
+		if (unalign_copy_to_user(_control, control, sizeof(*control)))
 			result = -EFAULT;
 	kfree(control);
 	return result;
@@ -937,7 +938,7 @@ static int snd_ctl_elem_write_user(struct snd_ctl_file *file,
 		result = snd_ctl_elem_write(card, file, control);
 	snd_power_unlock(card);
 	if (result >= 0)
-		if (copy_to_user(_control, control, sizeof(*control)))
+		if (unalign_copy_to_user(_control, control, sizeof(*control)))
 			result = -EFAULT;
 	kfree(control);
 	return result;
@@ -952,7 +953,7 @@ static int snd_ctl_elem_lock(struct snd_ctl_file *file,
 	struct snd_kcontrol_volatile *vd;
 	int result;
 	
-	if (copy_from_user(&id, _id, sizeof(id)))
+	if (unalign_copy_from_user(&id, _id, sizeof(id)))
 		return -EFAULT;
 	down_write(&card->controls_rwsem);
 	kctl = snd_ctl_find_id(card, &id);
@@ -980,7 +981,7 @@ static int snd_ctl_elem_unlock(struct snd_ctl_file *file,
 	struct snd_kcontrol_volatile *vd;
 	int result;
 	
-	if (copy_from_user(&id, _id, sizeof(id)))
+	if (unalign_copy_from_user(&id, _id, sizeof(id)))
 		return -EFAULT;
 	down_write(&card->controls_rwsem);
 	kctl = snd_ctl_find_id(card, &id);
@@ -1103,7 +1104,7 @@ static int snd_ctl_elem_user_tlv(struct snd_kcontrol *kcontrol,
 			ret = -ENOSPC;
 			goto err_unlock;
 		}
-		if (copy_to_user(tlv, ue->tlv_data, ue->tlv_data_size))
+		if (unalign_copy_to_user(tlv, ue->tlv_data, ue->tlv_data_size))
 			ret = -EFAULT;
 err_unlock:
 		mutex_unlock(&ue->card->user_ctl_lock);
@@ -1270,7 +1271,7 @@ static int snd_ctl_elem_add_user(struct snd_ctl_file *file,
 				 struct snd_ctl_elem_info __user *_info, int replace)
 {
 	struct snd_ctl_elem_info info;
-	if (copy_from_user(&info, _info, sizeof(info)))
+	if (unalign_copy_from_user(&info, _info, sizeof(info)))
 		return -EFAULT;
 	return snd_ctl_elem_add(file, &info, replace);
 }
@@ -1280,7 +1281,7 @@ static int snd_ctl_elem_remove(struct snd_ctl_file *file,
 {
 	struct snd_ctl_elem_id id;
 
-	if (copy_from_user(&id, _id, sizeof(id)))
+	if (unalign_copy_from_user(&id, _id, sizeof(id)))
 		return -EFAULT;
 	return snd_ctl_remove_user_ctl(file, &id);
 }
@@ -1317,7 +1318,7 @@ static int snd_ctl_tlv_ioctl(struct snd_ctl_file *file,
 	unsigned int len;
 	int err = 0;
 
-	if (copy_from_user(&tlv, _tlv, sizeof(tlv)))
+	if (unalign_copy_from_user(&tlv, _tlv, sizeof(tlv)))
 		return -EFAULT;
 	if (tlv.length < sizeof(unsigned int) * 2)
 		return -EINVAL;
@@ -1360,7 +1361,7 @@ static int snd_ctl_tlv_ioctl(struct snd_ctl_file *file,
 			err = -ENOMEM;
 			goto __kctl_end;
 		}
-		if (copy_to_user(_tlv->tlv, kctl->tlv.p, len))
+		if (unalign_copy_to_user(_tlv->tlv, kctl->tlv.p, len))
 			err = -EFAULT;
 	}
       __kctl_end:
@@ -1477,7 +1478,7 @@ static ssize_t snd_ctl_read(struct file *file, char __user *buffer,
 		list_del(&kev->list);
 		spin_unlock_irq(&ctl->read_lock);
 		kfree(kev);
-		if (copy_to_user(buffer, &ev, sizeof(struct snd_ctl_event))) {
+		if (unalign_copy_to_user(buffer, &ev, sizeof(struct snd_ctl_event))) {
 			err = -EFAULT;
 			goto __end;
 		}

@@ -192,4 +192,37 @@ config INTEL_POWERCLAMP
 	  enforce idle time which results in more package C-state residency. The
 	  user interface is exposed via generic thermal framework.
 
+config THERMAL_DDIE
+	bool "thermal ddie"
+	depends on THERMAL
+	help
+	  Use the 2713s thermal system.
+config THERMAL_SC2723S_PMIC
+	bool "thermal pmic"
+	depends on THERMAL
+	help
+	  Use the 2713s thermal system.
+config THERMAL_SC2713
+	bool "thermal 2713"
+	depends on THERMAL
+	help
+	  Choose the 2713 thermal system.
+
+config SPRD_CPU_COOLING
+	bool "sprd cpu cooling devices"
+	depends on THERMAL
+	help
+		Choose sprd cpu cooling devices.
+
+config THERMAL_BOARD_SENSOR
+       bool "thermal board sensor"
+	depends on THERMAL
+	help
+	  the board thermal system
+config THERMAL_ALONE_DDIE
+       bool "thermal alone ddie"
+	depends on THERMAL
+	help
+	  the thermal system
+
 endif

@@ -14,6 +14,9 @@
 #include <linux/bitops.h>
 #include <linux/hardirq.h> /* for in_interrupt() */
 #include <linux/hugetlb_inline.h>
+#ifdef CONFIG_SPRD_IODEBUG_IOSCHEDULE
+#include <linux/sched.h>
+#endif
 
 /*
  * Bits in mapping->flags.  The lower __GFP_BITS_SHIFT bits are the page
@@ -221,7 +224,25 @@ extern struct page *__page_cache_alloc(gfp_t gfp);
 #else
 static inline struct page *__page_cache_alloc(gfp_t gfp)
 {
-	return alloc_pages(gfp, 0);
+	struct page *page;
+
+#ifndef CONFIG_SPRD_PAGERECORDER
+	page = alloc_pages(gfp, 0);
+#else
+	page = alloc_pages_nopagedebug(gfp, 0);
+#endif
+
+	if (page && is_cma_pageblock(page)) {
+#ifndef CONFIG_SPRD_PAGERECORDER
+		__free_page(page);
+		page = alloc_pages(gfp & ~__GFP_MOVABLE, 0);
+#else
+		__free_page_nopagedebug(page);
+		page = alloc_pages_nopagedebug(gfp & ~__GFP_MOVABLE, 0);
+#endif
+	}
+
+	return page;
 }
 #endif
 
@@ -386,6 +407,12 @@ extern int wait_on_page_bit_killable(struct page *page, int bit_nr);
 
 static inline int wait_on_page_locked_killable(struct page *page)
 {
+#ifdef CONFIG_SPRD_IODEBUG_IOSCHEDULE
+	if (PageLocked(page) && (page->mapping && !((unsigned long)page->mapping & 0x1))){
+		current->lock_on_page = page;
+		current->lock_on_buffer = NULL;
+	}
+#endif
 	if (PageLocked(page))
 		return wait_on_page_bit_killable(page, PG_locked);
 	return 0;
@@ -400,6 +427,12 @@ static inline int wait_on_page_locked_killable(struct page *page)
  */
 static inline void wait_on_page_locked(struct page *page)
 {
+#ifdef CONFIG_SPRD_IODEBUG_IOSCHEDULE
+	if (PageLocked(page) && (page->mapping && !((unsigned long)page->mapping & 0x1))){
+		current->lock_on_page = page;
+		current->lock_on_buffer = NULL;
+	}
+#endif
 	if (PageLocked(page))
 		wait_on_page_bit(page, PG_locked);
 }

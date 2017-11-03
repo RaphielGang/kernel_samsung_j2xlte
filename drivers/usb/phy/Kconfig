@@ -99,6 +99,14 @@ config OMAP_USB3
 	  This driver interacts with the "OMAP Control USB Driver" to power
 	  on/off the PHY.
 
+config SPRD_USB3PHY
+	tristate "Spreadtrum USB3 PHY Driver"
+	default USB_DWC3_SPRD
+	help
+		Enable this to support the USB3 PHY that is part of SOC. This driver
+		takes care of all the PHY functionality, normally paired with
+		DesignWare USB3.0 (DRD) Controller.
+
 config SAMSUNG_USBPHY
 	tristate "Samsung USB PHY Driver"
 	help

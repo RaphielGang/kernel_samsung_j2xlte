@@ -17,12 +17,62 @@ menuconfig NEW_LEDS
 if NEW_LEDS
 
 config LEDS_CLASS
-	tristate "LED Class Support"
+	bool "LED Class Support"
 	help
 	  This option enables the led sysfs class in /sys/class/leds.  You'll
 	  need this to do anything useful with LEDs.  If unsure, say N.
 
 comment "LED drivers"
+
+config FLASHLIGHT
+	bool "Flashlight Support"
+	help
+	  This option enables the led sysfs class in /sys/class/flashlight.
+
+config RT_FLASH_LED
+	tristate "Richtek flash LED driver support"
+	depends on FLASHLIGHT
+	help
+	  Say Y here to enable Richtek's flash LED driver HAL architecture
+
+config FLED_RT5033
+	tristate "Richtek RT5033 flash LED driver"
+	depends on RT_FLASH_LED && MFD_RT5033
+	help
+	  A driver for Richtek RT5033 flash LED
+
+choice
+	prompt "Control method"
+	depends on FLED_RT5033
+	default FLED_RT5033_I2C
+	help
+	  Choose which control signal to use for enabling/disabling torch and flash light.
+
+config FLED_RT5033_I2C
+	bool "I2C"
+	help
+	  Use I2C to enable/disable torch and flash light.
+	  If unsure, say N.
+
+config FLED_RT5033_EXT_GPIO
+	bool "External(or ISP) GPIO"
+	help
+	  Use GPIO pins to enable/disable torch and flash light.
+	  If unsure, say N.
+
+endchoice
+
+config FLED_SM5701
+	tristate "SiliconMitus SM5701 flash LED driver"
+	depends on MFD_SM5701 || SPRD_CHARGER_SM5701
+	help
+	  A driver for SiliconMitus SM5701 flash LED
+
+config FLED_SPRD_SM5701
+	tristate "SiliconMitus SM5701 flash LED driver"
+	depends on MFD_SPRD_SM5701
+	help
+	  A driver for SiliconMitus SM5701 flash LED
 
 config LEDS_88PM860X
 	tristate "LED Support for Marvell 88PM860x PMIC"
@@ -73,6 +123,15 @@ config LEDS_LM3642
 	  converter plus 1.5A constant current driver for a high-current
 	  white LED.
 
+
+config LEDS_LM3648
+	tristate "LED support for LM3648 Chip"
+	depends on LEDS_CLASS && I2C
+	select REGMAP_I2C
+	help
+	  This option enables support for LEDs connected to LM3648.
+	  The LM3648 is a 2/4MHz fixed-frequency synchronous boost
+	  converter with 1.5A constant current single LED driver.
 
 config LEDS_LOCOMO
 	tristate "LED Support for Locomo device"
@@ -479,7 +538,76 @@ config LEDS_BLINKM
 	  This option enables support for the BlinkM RGB LED connected
 	  through I2C. Say Y to enable support for the BlinkM LED.
 
+config LEDS_SC8810_KB
+   tristate "LED Support for SC8810 keyboard backlight"
+
+config LEDS_SPRD_KB
+   tristate "LED Support for sprd keyboard backlight"
+   depends on LEDS_CLASS && (ADIE_SC2713S || ADIE_SC2713)
+   default n
+   help
+     This option enables support.
+
+config SPRD_KPLED_2723
+   tristate "LED Support for SPRD_KPLED_2723"
+   depends on LEDS_CLASS && (ADIE_SC2723S || ADIE_SC2723)
+   default n
+   help
+     This option enables support.
+
+config SPRD_KPLED_2731
+   tristate "LED Support for SPRD_KPLED_2731"
+   depends on LEDS_CLASS && (ADIE_SC2731S || ADIE_SC2731)
+   default n
+   help
+     This option enables support.
+
+config LEDS_SPRD_BLTC_RGB
+	tristate "LED Support for sprd bltc_rgb led"
+	depends on LEDS_CLASS
+	default n
+	help
+	  This option enables support.
+
+config LEDS_SPRD_BLTC_RGB_2731
+	tristate "LED Support for sprd bltc_rgb led"
+	depends on LEDS_CLASS
+	default n
+	help
+	  This option enables support.
+
+config LEDS_SPRD_RGB
+	tristate "LED Support for sprd rgb led"
+	depends on LEDS_CLASS
+	default n
+	help
+	  This option enables support.
+
+config LEDS_AN30259A
+	tristate "LED driver for panasonic AN30259A RGB LED"
+	depends on LEDS_CLASS
+	depends on I2C
+	help
+	  This option enables support for LEDs connected to the AN30259A
+	  LED driver chip accessed via the I2C bus.	
+	  AN30259A has three channel LED driver. By synchronous clock
+	  function, combined operation is possible.
+
+config LEDS_SMARTGLOW_AN30259A
+	tristate "Smart Glow driver based on Panasonic AN30259A RGB LED"
+	depends on LEDS_CLASS
+	depends on I2C
+	help
+	  This option enables support for LEDs connected to the AN30259A
+	  LED driver chip accessed via the I2C bus.	
+	  AN30259A has three channel LED driver. By synchronous clock
+	  function, combined operation is possible.
+	  Its customized for Samsung Smart Glow feature.
+
+	  
 comment "LED Triggers"
 source "drivers/leds/trigger/Kconfig"
+
+#source "drivers/leds/squricle-flash/Kconfig"
 
 endif # NEW_LEDS

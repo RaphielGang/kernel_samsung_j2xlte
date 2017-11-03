@@ -45,9 +45,16 @@
 #include <asm/smp_plat.h>
 #include <asm/virt.h>
 #include <asm/mach/arch.h>
-
 #define CREATE_TRACE_POINTS
 #include <trace/events/arm-ipi.h>
+
+#ifdef CONFIG_SPRD_DEBUG
+#include <soc/sprd/sprd_debug.h>
+#endif
+
+#if defined(CONFIG_SEC_DEBUG_SCHED_LOG) || defined(CONFIG_SEC_DEBUG)
+#include <soc/sprd/sec_debug.h>
+#endif
 
 /*
  * as from 2.5, kernels no longer have an init_tasks structure
@@ -60,7 +67,7 @@ struct secondary_data secondary_data;
  * control for which core is the next to come out of the secondary
  * boot "holding pen"
  */
-volatile int pen_release = -1;
+volatile int __cpuinitdata pen_release = -1;
 
 enum ipi_msg_type {
 	IPI_WAKEUP,
@@ -69,8 +76,8 @@ enum ipi_msg_type {
 	IPI_CALL_FUNC,
 	IPI_CALL_FUNC_SINGLE,
 	IPI_CPU_STOP,
-	IPI_COMPLETION,
 	IPI_CPU_BACKTRACE,
+	IPI_COMPLETION,
 };
 
 static DECLARE_COMPLETION(cpu_running);
@@ -468,8 +475,8 @@ static const char *ipi_types[NR_IPI] = {
 	S(IPI_CALL_FUNC, "Function call interrupts"),
 	S(IPI_CALL_FUNC_SINGLE, "Single function call interrupts"),
 	S(IPI_CPU_STOP, "CPU stop interrupts"),
-	S(IPI_COMPLETION, "completion interrupts"),
 	S(IPI_CPU_BACKTRACE, "CPU backtrace"),
+	S(IPI_COMPLETION, "completion interrupts"),
 };
 
 void show_ipi_list(struct seq_file *p, int prec)
@@ -583,6 +590,9 @@ static void ipi_cpu_stop(unsigned int cpu)
 		raw_spin_lock(&stop_lock);
 		printk(KERN_CRIT "CPU%u: stopping\n", cpu);
 		dump_stack();
+#ifdef CONFIG_SEC_DEBUG
+		sec_debug_dump_stack();
+#endif
 		raw_spin_unlock(&stop_lock);
 	}
 
@@ -591,21 +601,10 @@ static void ipi_cpu_stop(unsigned int cpu)
 	local_fiq_disable();
 	local_irq_disable();
 
+	flush_cache_all();
+
 	while (1)
 		cpu_relax();
-}
-
-static DEFINE_PER_CPU(struct completion *, cpu_completion);
-
-int register_ipi_completion(struct completion *completion, int cpu)
-{
-	per_cpu(cpu_completion, cpu) = completion;
-	return IPI_COMPLETION;
-}
-
-static void ipi_complete(unsigned int cpu)
-{
-	complete(per_cpu(cpu_completion, cpu));
 }
 
 static cpumask_t backtrace_mask;
@@ -659,6 +658,18 @@ static void ipi_cpu_backtrace(unsigned int cpu, struct pt_regs *regs)
 		cpu_clear(cpu, backtrace_mask);
 	}
 }
+static DEFINE_PER_CPU(struct completion *, cpu_completion);
+
+int register_ipi_completion(struct completion *completion, int cpu)
+{
+	per_cpu(cpu_completion, cpu) = completion;
+	return IPI_COMPLETION;
+}
+
+static void ipi_complete(unsigned int cpu)
+{
+	complete(per_cpu(cpu_completion, cpu));
+}
 
 /*
  * Main handler for inter-processor interrupts
@@ -668,6 +679,9 @@ asmlinkage void __exception_irq_entry do_IPI(int ipinr, struct pt_regs *regs)
 	handle_IPI(ipinr, regs);
 }
 
+#ifdef CONFIG_SPRD_SYSDUMP
+		extern void sysdump_ipi(struct pt_regs *regs);
+#endif
 void handle_IPI(int ipinr, struct pt_regs *regs)
 {
 	unsigned int cpu = smp_processor_id();
@@ -675,6 +689,13 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 
 	if (ipinr < NR_IPI)
 		__inc_irq_stat(cpu, ipi_irqs[ipinr]);
+
+#ifdef CONFIG_SPRD_DEBUG
+	sprd_debug_irq_log(ipinr, do_IPI, 1);
+#endif
+#ifdef CONFIG_SEC_DEBUG_SCHED_LOG
+	sec_debug_irq_log(ipinr, do_IPI, 1);
+#endif
 
 	trace_arm_ipi_entry(ipinr);
 	switch (ipinr) {
@@ -707,8 +728,15 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 
 	case IPI_CPU_STOP:
 		irq_enter();
+#ifdef CONFIG_SPRD_SYSDUMP
+		sysdump_ipi(regs);
+#endif
 		ipi_cpu_stop(cpu);
 		irq_exit();
+		break;
+
+	case IPI_CPU_BACKTRACE:
+		ipi_cpu_backtrace(cpu, regs);
 		break;
 
 	case IPI_COMPLETION:
@@ -717,15 +745,19 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 		irq_exit();
 		break;
 
-	case IPI_CPU_BACKTRACE:
-		ipi_cpu_backtrace(cpu, regs);
-		break;
-
 	default:
 		printk(KERN_CRIT "CPU%u: Unknown IPI message 0x%x\n",
 		       cpu, ipinr);
 		break;
 	}
+
+#ifdef CONFIG_SPRD_DEBUG
+	sprd_debug_irq_log(ipinr, do_IPI, 2);
+#endif
+#ifdef CONFIG_SEC_DEBUG_SCHED_LOG
+	sec_debug_irq_log(ipinr, do_IPI, 2);
+#endif
+
 	trace_arm_ipi_exit(ipinr);
 	set_irq_regs(old_regs);
 }

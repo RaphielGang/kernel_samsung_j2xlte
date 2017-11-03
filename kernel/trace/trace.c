@@ -430,6 +430,9 @@ int __trace_puts(unsigned long ip, const char *str, int size)
 	if (unlikely(tracing_selftest_running || tracing_disabled))
 		return 0;
 
+	if (unlikely(tracing_selftest_running || tracing_disabled))
+		return 0;
+
 	alloc = sizeof(*entry) + size + 2; /* possible \n added */
 
 	local_save_flags(irq_flags);
@@ -473,6 +476,9 @@ int __trace_bputs(unsigned long ip, const char *str)
 	int pc;
 
 	pc = preempt_count();
+
+	if (unlikely(tracing_selftest_running || tracing_disabled))
+		return 0;
 
 	if (unlikely(tracing_selftest_running || tracing_disabled))
 		return 0;

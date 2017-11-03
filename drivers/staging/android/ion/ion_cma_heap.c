@@ -25,7 +25,7 @@
 #include "ion_priv.h"
 
 #define ION_CMA_ALLOCATE_FAILED -1
-
+#if 0
 struct ion_cma_heap {
 	struct ion_heap heap;
 	struct device *dev;
@@ -193,7 +193,7 @@ static struct ion_heap_ops ion_cma_ops = {
 	.unmap_kernel = ion_cma_unmap_kernel,
 };
 
-struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *data)
+struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *data, struct device *dev)
 {
 	struct ion_cma_heap *cma_heap;
 
@@ -216,3 +216,4 @@ void ion_cma_heap_destroy(struct ion_heap *heap)
 
 	kfree(cma_heap);
 }
+#endif

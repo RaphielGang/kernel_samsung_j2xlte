@@ -30,7 +30,7 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <uapi/video/adf.h>
-#include "sync.h"
+#include <linux/sync.h>
 
 struct adf_obj;
 struct adf_obj_ops;
@@ -294,6 +294,8 @@ struct adf_device {
 
 	struct list_head post_list;
 	struct mutex post_lock;
+	int n_pending_post_cmd;
+	wait_queue_head_t pending_wq;
 	struct kthread_worker post_worker;
 	struct task_struct *post_thread;
 	struct kthread_work post_work;

@@ -43,6 +43,7 @@
 #include <sound/compress_params.h>
 #include <sound/compress_offload.h>
 #include <sound/compress_driver.h>
+#include <sound/sprd_memcpy_ops.h>
 
 /* TODO:
  * - add substream support for multiple devices in case of
@@ -81,7 +82,7 @@ static int snd_compr_open(struct inode *inode, struct file *f)
 	enum snd_compr_direction dirn;
 	int maj = imajor(inode);
 	int ret;
-
+	printk(KERN_ERR "compress open come!!\n");
 	if ((f->f_flags & O_ACCMODE) == O_WRONLY)
 		dirn = SND_COMPRESS_PLAYBACK;
 	else if ((f->f_flags & O_ACCMODE) == O_RDONLY)
@@ -213,7 +214,7 @@ snd_compr_ioctl_avail(struct snd_compr_stream *stream, unsigned long arg)
 	avail = snd_compr_calc_avail(stream, &ioctl_avail);
 	ioctl_avail.avail = avail;
 
-	if (copy_to_user((__u64 __user *)arg,
+	if (unalign_copy_to_user((__u64 __user *)arg,
 				&ioctl_avail, sizeof(ioctl_avail)))
 		return -EFAULT;
 	return 0;
@@ -235,13 +236,13 @@ static int snd_compr_write_data(struct snd_compr_stream *stream,
 	pr_debug("copying %ld at %lld\n",
 			(unsigned long)count, app_pointer);
 	if (count < runtime->buffer_size - app_pointer) {
-		if (copy_from_user(dstn, buf, count))
+		if (unalign_copy_from_user(dstn, buf, count))
 			return -EFAULT;
 	} else {
 		copy = runtime->buffer_size - app_pointer;
-		if (copy_from_user(dstn, buf, copy))
+		if (unalign_copy_from_user(dstn, buf, copy))
 			return -EFAULT;
-		if (copy_from_user(runtime->buffer, buf + copy, count - copy))
+		if (unalign_copy_from_user(runtime->buffer, buf + copy, count - copy))
 			return -EFAULT;
 	}
 	/* if DSP cares, let it know data has been written */
@@ -261,6 +262,7 @@ static ssize_t snd_compr_write(struct file *f, const char __user *buf,
 	if (snd_BUG_ON(!data))
 		return -EFAULT;
 
+	printk(KERN_ERR "%s entry\n", __func__);
 	stream = &data->stream;
 	mutex_lock(&stream->device->lock);
 	/* write is allowed when stream is running or has been steup */
@@ -421,7 +423,7 @@ snd_compr_get_caps(struct snd_compr_stream *stream, unsigned long arg)
 	retval = stream->ops->get_caps(stream, &caps);
 	if (retval)
 		goto out;
-	if (copy_to_user((void __user *)arg, &caps, sizeof(caps)))
+	if (unalign_copy_to_user((void __user *)arg, &caps, sizeof(caps)))
 		retval = -EFAULT;
 out:
 	return retval;
@@ -443,7 +445,7 @@ snd_compr_get_codec_caps(struct snd_compr_stream *stream, unsigned long arg)
 	retval = stream->ops->get_codec_caps(stream, caps);
 	if (retval)
 		goto out;
-	if (copy_to_user((void __user *)arg, caps, sizeof(*caps)))
+	if (unalign_copy_to_user((void __user *)arg, caps, sizeof(*caps)))
 		retval = -EFAULT;
 
 out:
@@ -507,7 +509,7 @@ snd_compr_set_params(struct snd_compr_stream *stream, unsigned long arg)
 		params = kmalloc(sizeof(*params), GFP_KERNEL);
 		if (!params)
 			return -ENOMEM;
-		if (copy_from_user(params, (void __user *)arg, sizeof(*params))) {
+		if (unalign_copy_from_user(params, (void __user *)arg, sizeof(*params))) {
 			retval = -EFAULT;
 			goto out;
 		}
@@ -556,7 +558,7 @@ snd_compr_get_params(struct snd_compr_stream *stream, unsigned long arg)
 	retval = stream->ops->get_params(stream, params);
 	if (retval)
 		goto out;
-	if (copy_to_user((char __user *)arg, params, sizeof(*params)))
+	if (unalign_copy_to_user((char __user *)arg, params, sizeof(*params)))
 		retval = -EFAULT;
 
 out:
@@ -573,14 +575,14 @@ snd_compr_get_metadata(struct snd_compr_stream *stream, unsigned long arg)
 	if (!stream->ops->get_metadata)
 		return -ENXIO;
 
-	if (copy_from_user(&metadata, (void __user *)arg, sizeof(metadata)))
+	if (unalign_copy_from_user(&metadata, (void __user *)arg, sizeof(metadata)))
 		return -EFAULT;
 
 	retval = stream->ops->get_metadata(stream, &metadata);
 	if (retval != 0)
 		return retval;
 
-	if (copy_to_user((void __user *)arg, &metadata, sizeof(metadata)))
+	if (unalign_copy_to_user((void __user *)arg, &metadata, sizeof(metadata)))
 		return -EFAULT;
 
 	return 0;
@@ -598,7 +600,7 @@ snd_compr_set_metadata(struct snd_compr_stream *stream, unsigned long arg)
 	* we should allow parameter change only when stream has been
 	* opened not in other cases
 	*/
-	if (copy_from_user(&metadata, (void __user *)arg, sizeof(metadata)))
+	if (unalign_copy_from_user(&metadata, (void __user *)arg, sizeof(metadata)))
 		return -EFAULT;
 
 	retval = stream->ops->set_metadata(stream, &metadata);
@@ -615,7 +617,7 @@ snd_compr_tstamp(struct snd_compr_stream *stream, unsigned long arg)
 
 	ret = snd_compr_update_tstamp(stream, &tstamp);
 	if (ret == 0)
-		ret = copy_to_user((struct snd_compr_tstamp __user *)arg,
+		ret = unalign_copy_to_user((struct snd_compr_tstamp __user *)arg,
 			&tstamp, sizeof(tstamp)) ? -EFAULT : 0;
 	return ret;
 }
@@ -774,6 +776,7 @@ static long snd_compr_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 	struct snd_compr_stream *stream;
 	int retval = -ENOTTY;
 
+	printk(KERN_ERR "compress io CMD=%d, caps=%d\n", _IOC_NR(cmd), _IOC_NR(SNDRV_COMPRESS_GET_CAPS));
 	if (snd_BUG_ON(!data))
 		return -EFAULT;
 	stream = &data->stream;
@@ -836,6 +839,17 @@ static long snd_compr_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 	return retval;
 }
 
+static long snd_compr_ioctl_compat(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct snd_pcm_file *pcm_file;
+	struct snd_pcm_substream *substream;
+	void __user *argp = (void __user *)((u32)(arg));
+
+	printk(KERN_ERR "%s entry\n", __func__);
+
+	return snd_compr_ioctl(file, cmd, argp);
+}
+
 static const struct file_operations snd_compr_file_ops = {
 		.owner =	THIS_MODULE,
 		.open =		snd_compr_open,
@@ -843,6 +857,7 @@ static const struct file_operations snd_compr_file_ops = {
 		.write =	snd_compr_write,
 		.read =		snd_compr_read,
 		.unlocked_ioctl = snd_compr_ioctl,
+		.compat_ioctl = snd_compr_ioctl_compat,
 		.mmap =		snd_compr_mmap,
 		.poll =		snd_compr_poll,
 };

@@ -39,6 +39,10 @@
 #include <asm/exception.h>
 #include <asm/system_misc.h>
 
+#ifdef CONFIG_SEC_DEBUG64
+#include <soc/sprd/sec_debug64.h>
+#endif
+
 static const char *handler[]= {
 	"Synchronous Abort",
 	"IRQ",
@@ -199,7 +203,11 @@ static int __die(const char *str, int err, struct thread_info *thread,
 	ret = notify_die(DIE_OOPS, str, regs, err, 0, SIGSEGV);
 	if (ret == NOTIFY_STOP)
 		return ret;
-
+#ifdef CONFIG_SEC_DEBUG64
+	if(!user_mode(regs)){
+		sec_debug_save_context(regs);
+	}
+#endif
 	print_modules();
 	__show_regs(regs);
 	pr_emerg("Process %.*s (pid: %d, stack limit = 0x%p)\n",
@@ -216,6 +224,10 @@ static int __die(const char *str, int err, struct thread_info *thread,
 }
 
 static DEFINE_RAW_SPINLOCK(die_lock);
+
+#ifdef CONFIG_SPRD_SYSDUMP /* TODO: jianjun.he */
+extern void sysdump_enter(int enter_id, const char *reason, struct pt_regs *regs);
+#endif
 
 /*
  * This function is protected against re-entrancy.
@@ -238,6 +250,9 @@ void die(const char *str, struct pt_regs *regs, int err)
 	bust_spinlocks(0);
 	add_taint(TAINT_DIE, LOCKDEP_NOW_UNRELIABLE);
 	raw_spin_unlock_irq(&die_lock);
+#ifdef CONFIG_SPRD_SYSDUMP /* TODO: jianjun.he */
+	sysdump_enter(1, "oops", regs);
+#endif
 	oops_exit();
 
 	if (in_interrupt())
@@ -307,6 +322,15 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 
 	if (call_undef_hook(regs, instr) == 0)
 		return;
+
+#if 1 /* remove me if possible */
+	/*ARMv8 deprecated instruction handler, cp15 barrier instruction */
+	if (((instr & 0x0fff0fff) == 0x0e070f95) ||\
+			((instr & 0x0fff0fdf) == 0x0e070f9a)) {
+		regs->pc += 4;
+		return;
+	}
+#endif
 
 die_sig:
 	if (show_unhandled_signals && unhandled_signal(current, SIGILL) &&

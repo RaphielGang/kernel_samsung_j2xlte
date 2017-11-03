@@ -14,12 +14,14 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/cpu.h>
-#include <linux/cpumask.h>
 #include <linux/vmstat.h>
 #include <linux/sched.h>
 #include <linux/math64.h>
 #include <linux/writeback.h>
 #include <linux/compaction.h>
+#include <linux/mm_inline.h>
+
+#include "internal.h"
 
 #ifdef CONFIG_VM_EVENT_COUNTERS
 DEFINE_PER_CPU(struct vm_event_state, vm_event_states) = {{0}};
@@ -433,12 +435,11 @@ EXPORT_SYMBOL(dec_zone_page_state);
  * with the global counters. These could cause remote node cache line
  * bouncing and will have to be only done when necessary.
  */
-bool refresh_cpu_vm_stats(int cpu)
+void refresh_cpu_vm_stats(int cpu)
 {
 	struct zone *zone;
 	int i;
 	int global_diff[NR_VM_ZONE_STAT_ITEMS] = { 0, };
-	bool vm_activity = false;
 
 	for_each_populated_zone(zone) {
 		struct per_cpu_pageset *p;
@@ -485,21 +486,14 @@ bool refresh_cpu_vm_stats(int cpu)
 		if (p->expire)
 			continue;
 
-		if (p->pcp.count) {
-			vm_activity = true;
+		if (p->pcp.count)
 			drain_zone_pages(zone, &p->pcp);
-		}
 #endif
 	}
 
 	for (i = 0; i < NR_VM_ZONE_STAT_ITEMS; i++)
-		if (global_diff[i]) {
+		if (global_diff[i])
 			atomic_long_add(global_diff[i], &vm_stat[i]);
-			vm_activity = true;
-		}
-
-	return vm_activity;
-
 }
 
 /*
@@ -626,6 +620,29 @@ int fragmentation_index(struct zone *zone, unsigned int order)
 	return __fragmentation_index(order, &info);
 }
 #endif
+
+#ifdef CONFIG_POMEMR_RECLAIM
+int get_buddyinfo_higherorder(long reclaim_size[MAX_ORDER_RECLAIM])
+{
+	unsigned int order;
+	struct zone *zone;
+    int ret = 0;
+	for_each_populated_zone(zone) {
+		if(zone->name[0] == 'H') {
+			for (order = MIN_ORDER_RECLAIM; order < MAX_ORDER_RECLAIM; order++) {
+				pr_debug(" kpomemr %6lu ", zone->free_area[order].nr_free);
+				reclaim_size[order] -=  zone->free_area[order].nr_free;
+                if (reclaim_size[order] > 0)
+                    ret = 1;
+			}
+		pr_debug("\n");
+		}
+	}
+	return ret;
+}
+
+EXPORT_SYMBOL(get_buddyinfo_higherorder);
+#endif /* CONFIG_POMEMR_RECLAIM */
 
 #if defined(CONFIG_PROC_FS) || defined(CONFIG_COMPACTION)
 #include <linux/proc_fs.h>
@@ -788,7 +805,6 @@ const char * const vmstat_text[] = {
 
 #ifdef CONFIG_NUMA_BALANCING
 	"numa_pte_updates",
-	"numa_huge_pte_updates",
 	"numa_hint_faults",
 	"numa_hint_faults_local",
 	"numa_pages_migrated",
@@ -1062,7 +1078,7 @@ static void zoneinfo_show_print(struct seq_file *m, pg_data_t *pgdat,
 		   "\n  all_unreclaimable: %u"
 		   "\n  start_pfn:         %lu"
 		   "\n  inactive_ratio:    %u",
-		   zone->all_unreclaimable,
+		   !zone_reclaimable(zone),
 		   zone->zone_start_pfn,
 		   zone->inactive_ratio);
 	seq_putc(m, '\n');
@@ -1184,70 +1200,20 @@ static const struct file_operations proc_vmstat_file_operations = {
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct delayed_work, vmstat_work);
 int sysctl_stat_interval __read_mostly = HZ;
-static struct cpumask vmstat_off_cpus;
-struct delayed_work vmstat_monitor_work;
 
-static inline bool need_vmstat(int cpu)
+static void vmstat_update(struct work_struct *w)
 {
-	struct zone *zone;
-	int i;
-
-	for_each_populated_zone(zone) {
-		struct per_cpu_pageset *p;
-
-		p = per_cpu_ptr(zone->pageset, cpu);
-
-		for (i = 0; i < NR_VM_ZONE_STAT_ITEMS; i++)
-			if (p->vm_stat_diff[i])
-				return true;
-
-		if (zone_to_nid(zone) != numa_node_id() && p->pcp.count)
-			return true;
-	}
-
-	return false;
+	refresh_cpu_vm_stats(smp_processor_id());
+	schedule_delayed_work(&__get_cpu_var(vmstat_work),
+		round_jiffies_relative(sysctl_stat_interval));
 }
 
-static void vmstat_update(struct work_struct *w);
-
-static void start_cpu_timer(int cpu)
-{
-	struct delayed_work *work = &per_cpu(vmstat_work, cpu);
-
-	cpumask_clear_cpu(cpu, &vmstat_off_cpus);
-	schedule_delayed_work_on(cpu, work, __round_jiffies_relative(HZ, cpu));
-}
-
-static void __cpuinit setup_cpu_timer(int cpu)
+static void __cpuinit start_cpu_timer(int cpu)
 {
 	struct delayed_work *work = &per_cpu(vmstat_work, cpu);
 
 	INIT_DEFERRABLE_WORK(work, vmstat_update);
-	start_cpu_timer(cpu);
-}
-
-static void vmstat_update_monitor(struct work_struct *w)
-{
-	int cpu;
-
-	for_each_cpu_and(cpu, &vmstat_off_cpus, cpu_online_mask)
-		if (need_vmstat(cpu))
-			start_cpu_timer(cpu);
-
-	queue_delayed_work(system_unbound_wq, &vmstat_monitor_work,
-		round_jiffies_relative(sysctl_stat_interval));
-}
-
-
-static void vmstat_update(struct work_struct *w)
-{
-	int cpu = smp_processor_id();
-
-	if (likely(refresh_cpu_vm_stats(cpu)))
-		schedule_delayed_work(&__get_cpu_var(vmstat_work),
-				round_jiffies_relative(sysctl_stat_interval));
-	else
-		cpumask_set_cpu(cpu, &vmstat_off_cpus);
+	schedule_delayed_work_on(cpu, work, __round_jiffies_relative(HZ, cpu));
 }
 
 /*
@@ -1264,19 +1230,17 @@ static int __cpuinit vmstat_cpuup_callback(struct notifier_block *nfb,
 	case CPU_ONLINE:
 	case CPU_ONLINE_FROZEN:
 		refresh_zone_stat_thresholds();
-		setup_cpu_timer(cpu);
+		start_cpu_timer(cpu);
 		node_set_state(cpu_to_node(cpu), N_CPU);
 		break;
 	case CPU_DOWN_PREPARE:
 	case CPU_DOWN_PREPARE_FROZEN:
-		if (!cpumask_test_cpu(cpu, &vmstat_off_cpus)) {
-			cancel_delayed_work_sync(&per_cpu(vmstat_work, cpu));
-			per_cpu(vmstat_work, cpu).work.func = NULL;
-		}
+		cancel_delayed_work_sync(&per_cpu(vmstat_work, cpu));
+		per_cpu(vmstat_work, cpu).work.func = NULL;
 		break;
 	case CPU_DOWN_FAILED:
 	case CPU_DOWN_FAILED_FROZEN:
-		setup_cpu_timer(cpu);
+		start_cpu_timer(cpu);
 		break;
 	case CPU_DEAD:
 	case CPU_DEAD_FROZEN:
@@ -1299,14 +1263,8 @@ static int __init setup_vmstat(void)
 
 	register_cpu_notifier(&vmstat_notifier);
 
-	INIT_DEFERRABLE_WORK(&vmstat_monitor_work,
-				vmstat_update_monitor);
-	queue_delayed_work(system_unbound_wq,
-				&vmstat_monitor_work,
-				round_jiffies_relative(HZ));
-
 	for_each_online_cpu(cpu)
-		setup_cpu_timer(cpu);
+		start_cpu_timer(cpu);
 #endif
 #ifdef CONFIG_PROC_FS
 	proc_create("buddyinfo", S_IRUGO, NULL, &fragmentation_file_operations);

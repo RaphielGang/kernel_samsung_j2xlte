@@ -31,6 +31,7 @@
 #include "seq_queue.h"
 #include "seq_info.h"
 #include "seq_lock.h"
+#include <sound/sprd_memcpy_ops.h>
 
 static inline int snd_seq_pool_available(struct snd_seq_pool *pool)
 {
@@ -92,7 +93,7 @@ int snd_seq_dump_var_event(const struct snd_seq_event *event,
 			int size = sizeof(buf);
 			if (len < size)
 				size = len;
-			if (copy_from_user(buf, curptr, size))
+			if (unalign_copy_from_user(buf, curptr, size))
 				return -EFAULT;
 			err = func(private_data, buf, size);
 			if (err < 0)
@@ -135,7 +136,7 @@ static int seq_copy_in_kernel(char **bufptr, const void *src, int size)
 
 static int seq_copy_in_user(char __user **bufptr, const void *src, int size)
 {
-	if (copy_to_user(*bufptr, src, size))
+	if (unalign_copy_to_user(*bufptr, src, size))
 		return -EFAULT;
 	*bufptr += size;
 	return 0;
@@ -158,7 +159,7 @@ int snd_seq_expand_var_event(const struct snd_seq_event *event, int count, char 
 	if (event->data.ext.len & SNDRV_SEQ_EXT_USRPTR) {
 		if (! in_kernel)
 			return -EINVAL;
-		if (copy_from_user(buf, (void __force __user *)event->data.ext.ptr, len))
+		if (unalign_copy_from_user(buf, (void __force __user *)event->data.ext.ptr, len))
 			return -EFAULT;
 		return newlen;
 	}
@@ -344,7 +345,7 @@ int snd_seq_event_dup(struct snd_seq_pool *pool, struct snd_seq_event *event,
 				tmp->event = src->event;
 				src = src->next;
 			} else if (is_usrptr) {
-				if (copy_from_user(&tmp->event, (char __force __user *)buf, size)) {
+				if (unalign_copy_from_user(&tmp->event, (char __force __user *)buf, size)) {
 					err = -EFAULT;
 					goto __error;
 				}

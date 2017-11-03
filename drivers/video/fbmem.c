@@ -991,7 +991,8 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 		if (ret)
 			goto done;
 
-		if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) {
+		if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW
+			|| (var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NODISP) {
 			struct fb_var_screeninfo old_var;
 			struct fb_videomode mode;
 
@@ -1017,7 +1018,10 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 				}
 			}
 
-			fb_pan_display(info, &info->var);
+			if((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) {
+				fb_pan_display(info, &info->var);
+			}
+
 			fb_set_cmap(&info->cmap, info);
 			fb_var_to_videomode(&mode, &info->var);
 
@@ -1166,7 +1170,7 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			return -EFAULT;
 		if (con2fb.console < 1 || con2fb.console > MAX_NR_CONSOLES)
 			return -EINVAL;
-		if (con2fb.framebuffer < 0 || con2fb.framebuffer >= FB_MAX)
+		if (con2fb.framebuffer >= FB_MAX)
 			return -EINVAL;
 		if (!registered_fb[con2fb.framebuffer])
 			request_module("fb%d", con2fb.framebuffer);
@@ -1194,14 +1198,14 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		unlock_fb_info(info);
 		break;
 	default:
-		if (!lock_fb_info(info))
-			return -ENODEV;
+		/*if (!lock_fb_info(info))
+			return -ENODEV;*/
 		fb = info->fbops;
 		if (fb->fb_ioctl)
 			ret = fb->fb_ioctl(info, cmd, arg);
 		else
 			ret = -ENOTTY;
-		unlock_fb_info(info);
+		/*unlock_fb_info(info);*/
 	}
 	return ret;
 }
@@ -1604,57 +1608,62 @@ static int do_register_framebuffer(struct fb_info *fb_info)
 	for (i = 0 ; i < FB_MAX; i++)
 		if (!registered_fb[i])
 			break;
-	fb_info->node = i;
-	atomic_set(&fb_info->count, 1);
-	mutex_init(&fb_info->lock);
-	mutex_init(&fb_info->mm_lock);
+	if(i < FB_MAX){
+		fb_info->node = i;
+		atomic_set(&fb_info->count, 1);
+		mutex_init(&fb_info->lock);
+		mutex_init(&fb_info->mm_lock);
 
-	fb_info->dev = device_create(fb_class, fb_info->device,
+		fb_info->dev = device_create(fb_class, fb_info->device,
 				     MKDEV(FB_MAJOR, i), NULL, "fb%d", i);
-	if (IS_ERR(fb_info->dev)) {
-		/* Not fatal */
-		printk(KERN_WARNING "Unable to create device for framebuffer %d; errno = %ld\n", i, PTR_ERR(fb_info->dev));
-		fb_info->dev = NULL;
-	} else
-		fb_init_device(fb_info);
+		if (IS_ERR(fb_info->dev)) {
+			/* Not fatal */
+			printk(KERN_WARNING "Unable to create device for framebuffer %d; errno = %ld\n", i, PTR_ERR(fb_info->dev));
+			fb_info->dev = NULL;
+		} else
+			fb_init_device(fb_info);
 
-	if (fb_info->pixmap.addr == NULL) {
-		fb_info->pixmap.addr = kmalloc(FBPIXMAPSIZE, GFP_KERNEL);
-		if (fb_info->pixmap.addr) {
-			fb_info->pixmap.size = FBPIXMAPSIZE;
-			fb_info->pixmap.buf_align = 1;
-			fb_info->pixmap.scan_align = 1;
-			fb_info->pixmap.access_align = 32;
-			fb_info->pixmap.flags = FB_PIXMAP_DEFAULT;
+		if (fb_info->pixmap.addr == NULL) {
+			fb_info->pixmap.addr = kmalloc(FBPIXMAPSIZE, GFP_KERNEL);
+			if (fb_info->pixmap.addr) {
+				fb_info->pixmap.size = FBPIXMAPSIZE;
+				fb_info->pixmap.buf_align = 1;
+				fb_info->pixmap.scan_align = 1;
+				fb_info->pixmap.access_align = 32;
+				fb_info->pixmap.flags = FB_PIXMAP_DEFAULT;
+			}
 		}
-	}	
-	fb_info->pixmap.offset = 0;
+		fb_info->pixmap.offset = 0;
 
-	if (!fb_info->pixmap.blit_x)
-		fb_info->pixmap.blit_x = ~(u32)0;
+		if (!fb_info->pixmap.blit_x)
+			fb_info->pixmap.blit_x = ~(u32)0;
 
-	if (!fb_info->pixmap.blit_y)
-		fb_info->pixmap.blit_y = ~(u32)0;
+		if (!fb_info->pixmap.blit_y)
+			fb_info->pixmap.blit_y = ~(u32)0;
 
-	if (!fb_info->modelist.prev || !fb_info->modelist.next)
-		INIT_LIST_HEAD(&fb_info->modelist);
+		if (!fb_info->modelist.prev || !fb_info->modelist.next)
+			INIT_LIST_HEAD(&fb_info->modelist);
 
-	if (fb_info->skip_vt_switch)
-		pm_vt_switch_required(fb_info->dev, false);
+		if (fb_info->skip_vt_switch)
+			pm_vt_switch_required(fb_info->dev, false);
+		else
+			pm_vt_switch_required(fb_info->dev, true);
+
+		fb_var_to_videomode(&mode, &fb_info->var);
+		fb_add_videomode(&mode, &fb_info->modelist);
+		registered_fb[i] = fb_info;
+
+		event.info = fb_info;
+		if (!lock_fb_info(fb_info))
+			return -ENODEV;
+		console_lock();
+		fb_notifier_call_chain(FB_EVENT_FB_REGISTERED, &event);
+		console_unlock();
+		unlock_fb_info(fb_info);
+	}
 	else
-		pm_vt_switch_required(fb_info->dev, true);
+		return -EACCES;
 
-	fb_var_to_videomode(&mode, &fb_info->var);
-	fb_add_videomode(&mode, &fb_info->modelist);
-	registered_fb[i] = fb_info;
-
-	event.info = fb_info;
-	if (!lock_fb_info(fb_info))
-		return -ENODEV;
-	console_lock();
-	fb_notifier_call_chain(FB_EVENT_FB_REGISTERED, &event);
-	console_unlock();
-	unlock_fb_info(fb_info);
 	return 0;
 }
 

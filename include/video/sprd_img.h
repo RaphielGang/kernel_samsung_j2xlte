@@ -91,11 +91,6 @@ enum sprd_flash_io_id {
 	FLASH_IOID_MAX
 };
 
-enum sprd_buf_flag {
-	IMG_BUF_FLAG_INIT,
-	IMG_BUF_FLAG_RUNNING,
-	IMG_BUF_FLAG_MAX
-};
 struct sprd_img_size {
 	uint32_t w;
 	uint32_t h;
@@ -125,7 +120,6 @@ struct sprd_img_parm {
 	uint32_t                  need_isp;
 	uint32_t                  camera_id;
 	uint32_t                  is_reserved_buf;
-	uint32_t                  buf_flag;
 	struct sprd_img_rect      crop_rect;
 	struct sprd_img_size      dst_size;
 	struct sprd_img_frm_addr  frame_addr;

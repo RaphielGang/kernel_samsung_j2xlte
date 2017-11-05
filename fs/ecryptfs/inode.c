@@ -139,8 +139,6 @@ static int ecryptfs_interpose(struct dentry *lower_dentry,
 	if (IS_ERR(inode))
 		return PTR_ERR(inode);
 	d_instantiate(dentry, inode);
-	if(d_unhashed(dentry))
-		d_rehash(dentry);
 
 	return 0;
 }
@@ -336,8 +334,6 @@ ecryptfs_create(struct inode *directory_inode, struct dentry *ecryptfs_dentry,
 	}
 	unlock_new_inode(ecryptfs_inode);
 	d_instantiate(ecryptfs_dentry, ecryptfs_inode);
-	if(d_unhashed(ecryptfs_dentry))
-		d_rehash(ecryptfs_dentry);
 out:
 	return rc;
 }
@@ -403,6 +399,8 @@ static int ecryptfs_lookup_interpose(struct dentry *dentry,
 	ecryptfs_set_dentry_lower_mnt(dentry, lower_mnt);
 
 	if (!lower_dentry->d_inode) {
+		/* We want to add because we couldn't find in lower */
+		d_add(dentry, NULL);
 		return 0;
 	}
 	inode = __ecryptfs_get_inode(lower_inode, dir_inode->i_sb);

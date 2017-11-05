@@ -8,6 +8,7 @@
 //#include <linux/sprd_battery_common.h>
 #include "../../../../drivers/battery/sprd_2713_fgu.h"
 
+
 struct battery_data_t {
     struct sprd_battery_platform_data *pdata;
 };

@@ -48,7 +48,7 @@
 #include <linux/input-hook.h>
 
 #if defined(CONFIG_MACH_J1ACEVELTE)
-#define DEBUG_KEYPAD	1	
+#define DEBUG_KEYPAD	1
 #else
 #define DEBUG_KEYPAD	0
 #endif
@@ -166,8 +166,12 @@ static void __keypad_enable(void)
 	sci_glb_set(REG_AON_APB_APB_RST0, BIT_KPD_SOFT_RST);
 	mdelay(2);
 	sci_glb_clr(REG_AON_APB_APB_RST0, BIT_KPD_SOFT_RST);
-	sci_glb_set(REG_AON_APB_APB_EB0, BIT_KPD_EB);
+	mdelay(2);	// add 2ms delay here
 	sci_glb_set(REG_AON_APB_APB_RTC_EB, BIT_KPD_RTC_EB);
+	mdelay(2);	// add 2ms delay here
+	sci_glb_set(REG_AON_APB_APB_RTC_EB, BIT_KPD_RTC_EB);	// try to write it again
+	mdelay(2);	// add 2ms delay here
+	sci_glb_set(REG_AON_APB_APB_EB0, BIT_KPD_EB);
 }
 
 static void __keypad_disable(void)
@@ -285,7 +289,7 @@ static ssize_t powerkey_show(struct device *dev, struct device_attribute *attr, 
 	return is_key_checked;
 }
 
-#if	DEBUG_KEYPAD
+#if DEBUG_KEYPAD
 static void dump_keypad_register(void)
 {
 #define INT_MASK_STS                (SPRD_INTC1_BASE + 0x0000)
@@ -293,35 +297,35 @@ static void dump_keypad_register(void)
 #define INT_EN                      (SPRD_INTC1_BASE + 0x0008)
 #define INT_DIS                     (SPRD_INTC1_BASE + 0x000C)
 
-	printk("\nREG_INT_MASK_STS = 0x%08x\n", __raw_readl(INT_MASK_STS));
+	printk("==================================== SPRD ==\n");
+	printk("REG_AON_APB_APB_RST0 = 0x%08x\n", __raw_readl(REG_AON_APB_APB_RST0));
+	printk("REG_AON_APB_APB_EB0 = 0x%08x\n", __raw_readl(REG_AON_APB_APB_EB0));
+	printk("REG_AON_APB_APB_RTC_EB = 0x%08x\n", __raw_readl(REG_AON_APB_APB_RTC_EB));
+	printk("REG_INT_MASK_STS = 0x%08x\n", __raw_readl(INT_MASK_STS));
 	printk("REG_INT_RAW_STS = 0x%08x\n", __raw_readl(INT_RAW_STS));
 	printk("REG_INT_EN = 0x%08x\n", __raw_readl(INT_EN));
 	printk("REG_INT_DIS = 0x%08x\n", __raw_readl(INT_DIS));
 	printk("REG_KPD_CTRL = 0x%08x\n", __raw_readl(KPD_CTRL));
 	printk("REG_KPD_INT_EN = 0x%08x\n", __raw_readl(KPD_INT_EN));
-	printk("REG_KPD_INT_RAW_STATUS = 0x%08x\n",
-	       __raw_readl(KPD_INT_RAW_STATUS));
-	printk("REG_KPD_INT_MASK_STATUS = 0x%08x\n",
-	       __raw_readl(KPD_INT_MASK_STATUS));
+	printk("REG_KPD_INT_RAW_STATUS = 0x%08x\n", __raw_readl(KPD_INT_RAW_STATUS));
+	printk("REG_KPD_INT_MASK_STATUS = 0x%08x\n", __raw_readl(KPD_INT_MASK_STATUS));
 	printk("REG_KPD_INT_CLR = 0x%08x\n", __raw_readl(KPD_INT_CLR));
 	printk("REG_KPD_POLARITY = 0x%08x\n", __raw_readl(KPD_POLARITY));
-	printk("REG_KPD_DEBOUNCE_CNT = 0x%08x\n",
-	       __raw_readl(KPD_DEBOUNCE_CNT));
-	printk("REG_KPD_LONG_KEY_CNT = 0x%08x\n",
-	       __raw_readl(KPD_LONG_KEY_CNT));
+	printk("REG_KPD_DEBOUNCE_CNT = 0x%08x\n", __raw_readl(KPD_DEBOUNCE_CNT));
+	printk("REG_KPD_LONG_KEY_CNT = 0x%08x\n", __raw_readl(KPD_LONG_KEY_CNT));
 	printk("REG_KPD_SLEEP_CNT = 0x%08x\n", __raw_readl(KPD_SLEEP_CNT));
 	printk("REG_KPD_CLK_DIV_CNT = 0x%08x\n", __raw_readl(KPD_CLK_DIV_CNT));
 	printk("REG_KPD_KEY_STATUS = 0x%08x\n", __raw_readl(KPD_KEY_STATUS));
-	printk("REG_KPD_SLEEP_STATUS = 0x%08x\n",
-	       __raw_readl(KPD_SLEEP_STATUS));
+	printk("REG_KPD_SLEEP_STATUS = 0x%08x\n", __raw_readl(KPD_SLEEP_STATUS));
+	printk("KPD_DEBUG_STATUS1 = 0x%08x\n", __raw_readl(KPD_DEBUG_STATUS1));
+	printk("KPD_DEBUG_STATUS2 = 0x%08x\n", __raw_readl(KPD_DEBUG_STATUS2));
+	printk("====================================\n");
 }
 #else
 static void dump_keypad_register(void)
 {
 }
 #endif
-
-
 
 static irqreturn_t sci_keypad_isr(int irq, void *dev_id)
 {
@@ -333,7 +337,6 @@ static irqreturn_t sci_keypad_isr(int irq, void *dev_id)
 	unsigned short *keycodes = sci_kpd->input_dev->keycode;
 	unsigned int row_shift = get_count_order(sci_kpd->cols);
 	int col, row;
-
 
 	value = __raw_readl(KPD_INT_CLR);
 	value |= KPD_INT_ALL;

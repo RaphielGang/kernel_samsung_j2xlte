@@ -28,6 +28,7 @@
 #include <linux/tcp.h>
 #include <linux/icmp.h>
 #include <linux/icmpv6.h>
+#include <linux/if_arp.h>
 #include <asm/byteorder.h>
 #include <linux/tty.h>
 #include <linux/platform_device.h>
@@ -871,7 +872,7 @@ seth_tx_pkt(void* data, struct sk_buff* skb, int is_ack)
 
 #ifdef CONFIG_SETH_OPT
 #ifdef CONFIG_SETH_RAWIP
-	skb_pull_inline(skb, SETH_ETH_HLEN);
+	/*skb_pull_inline(skb, SETH_ETH_HLEN);*/
 	blk.length = skb->len;
 	unalign_memcpy(blk.addr, skb->data, skb->len);
 #else
@@ -1147,6 +1148,23 @@ static inline void seth_destroy_pdata(struct seth_init_data **init)
 #endif
 }
 
+/**
+ * This function is mainly copied from ether_setup, except for header_ops
+ * is NULL, then in xmit path, skb will not contain an eth header.
+ */
+static void seth_setup(struct net_device *dev)
+{
+	dev->type		= ARPHRD_ETHER;
+	dev->hard_header_len 	= ETH_HLEN;
+	dev->mtu		= ETH_DATA_LEN;
+	dev->addr_len		= ETH_ALEN;
+	dev->tx_queue_len	= 1000;	/* Ethernet wants good queues */
+	dev->flags		= IFF_BROADCAST|IFF_MULTICAST;
+	dev->priv_flags		|= IFF_TX_SKB_SHARING;
+
+	memset(dev->broadcast, 0xFF, ETH_ALEN);
+}
+
 static int seth_probe(struct platform_device *pdev)
 {
 	struct seth_init_data *pdata = pdev->dev.platform_data;
@@ -1170,7 +1188,11 @@ static int seth_probe(struct platform_device *pdev)
 	else
 		strcpy(ifname, "veth%d");
 
+#ifdef CONFIG_SETH_RAWIP
+	netdev = alloc_netdev (sizeof (SEth), ifname, seth_setup);
+#else
 	netdev = alloc_netdev (sizeof (SEth), ifname, ether_setup);
+#endif
 	if (!netdev) {
 		seth_destroy_pdata(&pdata);
 		SETH_ERR ("alloc_netdev() failed.\n");

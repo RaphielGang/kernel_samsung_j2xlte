@@ -2511,8 +2511,13 @@ int input_register_device(struct input_dev *dev)
 	if (!dev->setkeycode)
 		dev->setkeycode = input_default_setkeycode;
 
-	dev_set_name(&dev->dev, "input%ld",
+	if (dev->device_node_name) {
+		dev_set_name(&dev->dev, "input_%s", dev->device_node_name);
+		atomic_inc_return(&input_no);
+	} else {
+		dev_set_name(&dev->dev, "input%ld",
 		     (unsigned long) atomic_inc_return(&input_no) - 1);
+	}
 
 	error = device_add(&dev->dev);
 	if (error)

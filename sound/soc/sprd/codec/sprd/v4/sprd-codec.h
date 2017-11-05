@@ -485,6 +485,7 @@
 
 /* ANA_STS0 */
 #define OTP_FLAG		    (15)
+#define CG_HP_DVLD		    (12)
 #define HP_POP_FLG		    (7)////////////CHECK
 #define HP_POP_FLG_MASK		(0x3)
 #define HP_POP_FLG_NEAR_CMP	(3)

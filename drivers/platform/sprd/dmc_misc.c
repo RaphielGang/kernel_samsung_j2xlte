@@ -57,6 +57,13 @@ void dynamic_dmc_qos_config(u32 id, u32 set)
 		sci_glb_write(SPRD_LPDDR2_BASE+0x4b4, val, -1UL);//change dispc timeout to 0x100
 #endif
 		break;
+	case 1:
+		/*vilte video call*/
+		sci_glb_write(SPRD_LPDDR2_BASE+0x25c, 0x10000001, -1UL);
+		sci_glb_write(SPRD_LPDDR2_BASE+0x264, 0x08000100, -1UL);
+		sci_glb_write(SPRD_LPDDR2_BASE+0x26c, 0x10000100, -1UL);
+
+		break;		
 	default:
 			break;
 	}

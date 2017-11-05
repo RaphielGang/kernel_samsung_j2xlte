@@ -1050,7 +1050,11 @@ static int evdev_connect(struct input_handler *handler, struct input_dev *dev,
 	/* Normalize device number if it falls into legacy range */
 	if (dev_no < EVDEV_MINOR_BASE + EVDEV_MINORS)
 		dev_no -= EVDEV_MINOR_BASE;
-	dev_set_name(&evdev->dev, "event%d", dev_no);
+
+	if(dev->device_node_name)
+		dev_set_name(&evdev->dev, "event_%s", dev->device_node_name);
+	else
+		dev_set_name(&evdev->dev, "event%d", dev_no);
 
 	evdev->handle.dev = input_get_device(dev);
 	evdev->handle.name = dev_name(&evdev->dev);

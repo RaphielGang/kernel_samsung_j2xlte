@@ -83,6 +83,7 @@
 #define SAUDIO_CMD_SET_CAPTURE_ROUTE		0x00000200
 #define SAUDIO_CMD_ENABLE_LOOP		0x00000400
 #define SAUDIO_CMD_TYPE_LOOP		0x00000800
+#define SAUDIO_CMD_SET_APPTYPE		0x00002000
 
 #define SAUDIO_CMD_OPEN_RET		0x00010000
 #define SAUDIO_CMD_CLOSE_RET		0x00020000
@@ -96,6 +97,7 @@
 #define SAUDIO_CMD_SET_CAPTURE_ROUTE_RET		0x02000000
 #define SAUDIO_CMD_ENABLE_LOOP_RET		0x04000000
 #define SAUDIO_CMD_TYPE_LOOP_RET		0x08000000
+#define SAUDIO_CMD_SET_APPTYPE_RET		0x20000000
 
 #define SAUDIO_DATA_PCM			0x00000040
 #define SAUDIO_DATA_SILENCE		0x00000080
@@ -217,11 +219,29 @@ struct snd_saudio {
 	uint32_t kcon_val_capture;
 	uint32_t kcon_val_en;
 	uint32_t kcon_val_type;
+        uint32_t kcon_apptype;
 };
 
 static DEFINE_MUTEX(snd_sound);
 
 static int saudio_snd_card_free(const struct snd_saudio *saudio);
+
+static int snd_pcm_APPType_control_info(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_info *uinfo);
+
+static int snd_pcm_APPType_control_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol);
+
+static int snd_pcm_APPType_control_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol);
+static struct snd_kcontrol_new __APPTypedata = {
+	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+	.name = "PCM APPTYPE",
+	.count = 1,
+	.info = snd_pcm_APPType_control_info,
+	.get = snd_pcm_APPType_control_get,
+	.put = snd_pcm_APPType_control_put
+};
 
 static int snd_pcm_playback_control_info(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_info *uinfo);
@@ -1309,7 +1329,14 @@ static int saudio_snd_init_card(struct snd_saudio *saudio)
 	printk(KERN_INFO "yaye saudio.c:kcontrol create entry3!!!!saudio:%x, kctl:%x, card:%x, add_err:%d \n",
 	saudio,kctl,saudio->card,err);
 }
+{
+	struct snd_kcontrol *kctl;
 
+	kctl = snd_ctl_new1(&__APPTypedata, saudio);
+	err = snd_ctl_add(saudio->card, kctl);
+	printk(KERN_INFO "yaye saudio.c:kcontrol create entry6!!!!saudio:%x, kctl:%x, card:%x, add_err:%d \n",
+	saudio,kctl,saudio->card,err);
+}
 	err = snd_card_register(saudio->card);
 
 	mutex_unlock(&snd_sound);
@@ -1793,6 +1820,62 @@ static int snd_pcm_loop_type_control_put(struct snd_kcontrol *kcontrol,
 				0);
 		if (result) {
 			ETRACE("yaye snd_pcm_loop_type_control_put: RESUME, send_common_cmd result is %d!\n",result);
+			if(result != (-ERESTARTSYS))
+			saudio_snd_card_free(saudio);
+			return result;
+		}
+	}
+
+	return changed;
+}
+static int snd_pcm_APPType_control_info(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = kcontrol->count;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 0x10;
+	return 0;
+}
+static int snd_pcm_APPType_control_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	printk(KERN_INFO "yaye snd_pcm_APPType_control_get entry!!!kcontrol:%x!\n",kcontrol);
+	if(kcontrol){
+		int i=0;
+
+		if(kcontrol->private_data){
+			struct snd_saudio *saudio = kcontrol->private_data;
+
+			ucontrol->value.integer.value[0] = saudio->kcon_apptype;
+			printk(KERN_INFO "yaye snd_pcm_APPType_control_get!!!! get value %d!\n", ucontrol->value.integer.value[0]);
+		}
+	}
+	return 0;
+}
+
+static int snd_pcm_APPType_control_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	int changed = 0;
+	int result = 0;
+	int i=0;
+	struct snd_saudio *saudio = kcontrol->private_data;
+
+
+	if (ucontrol->value.integer.value[0] !=  saudio->kcon_apptype){
+		printk(KERN_INFO "yaye snd_pcm_APPType_control_put entry set value:%d!!!\n", ucontrol->value.integer.value[0]);
+		saudio->kcon_apptype = ucontrol->value.integer.value[0];
+		changed = 1;
+
+		int app_type = saudio->kcon_apptype;
+		printk(KERN_INFO "yaye snd_pcm_APPType_control_put mixer_route %d!!!!\n", app_type);
+		result =
+			saudio_send_common_cmd_ex(saudio->dst, saudio->channel,
+				SAUDIO_CMD_SET_APPTYPE, SAUDIO_CMD_SET_APPTYPE, app_type, 0,
+				0);
+		if (result) {
+			ETRACE("yaye snd_pcm_APPType_control_put: RESUME, send_common_cmd result is %d!\n",result);
 			if(result != (-ERESTARTSYS))
 			saudio_snd_card_free(saudio);
 			return result;

@@ -134,6 +134,8 @@
 #define VENDOR	"SENSORTEK"
 #define CHIP_ID	"STK3013"
 
+#define SENSOR_DEVICE_NODE_NAME		"prox"
+
 #define STK3310SA_PID	0x17
 #define STK3311SA_PID	0x1E
 #define STK3311WV_PID	0x1D
@@ -1699,6 +1701,9 @@ static int stk3013_probe(struct i2c_client *client, const struct i2c_device_id *
 		goto err_input_alloc_device;
 	}
 	ps_data->ps_input_dev->name = "proximity_sensor";
+	// create sensor nodes as /dev/input/event_prox & /sys/class/input/input_prox
+	ps_data->ps_input_dev->device_node_name = SENSOR_DEVICE_NODE_NAME;
+
 	set_bit(EV_ABS, ps_data->ps_input_dev->evbit);
 	input_set_capability(ps_data->ps_input_dev, EV_ABS, ABS_DISTANCE);
 	input_set_abs_params(ps_data->ps_input_dev, ABS_DISTANCE, 0, 1, 0, 0);
@@ -1706,13 +1711,6 @@ static int stk3013_probe(struct i2c_client *client, const struct i2c_device_id *
 	if (ret < 0) {
 		pr_err("%s: can not register ps input device\n", __func__);
 		goto err_input_register_device;
-	}
-
-	ret = sensors_create_symlink(&ps_data->ps_input_dev->dev.kobj,
-		ps_data->ps_input_dev->name);
-	if (ret < 0) {
-		pr_err("%s, create_symlink error\n", __func__);
-		goto err_sensors_create_symlink_prox;
 	}
 
 	ret = sysfs_create_group(&ps_data->ps_input_dev->dev.kobj, &proximity_attribute_group);
@@ -1764,9 +1762,6 @@ err_stk3013_setup_irq:
 	gpio_free(ps_data->int_pin);
 
 err_sysfs_create_group_proximity:
-	sensors_remove_symlink(&ps_data->ps_input_dev->dev.kobj,
-	ps_data->ps_input_dev->name);
-err_sensors_create_symlink_prox:
 	input_unregister_device(ps_data->ps_input_dev);
 err_input_register_device:
 	input_free_device(ps_data->ps_input_dev);
@@ -1800,8 +1795,6 @@ static int stk3013_remove(struct i2c_client *client)
 	}
 	destroy_workqueue(ps_data->prox_wq);
 	sensors_unregister(ps_data->ps_dev, prox_sensor_attrs);
-	sensors_remove_symlink(&ps_data->ps_input_dev->dev.kobj,
-		ps_data->ps_input_dev->name);
 	sysfs_remove_group(&ps_data->ps_input_dev->dev.kobj, &proximity_attribute_group);
 	input_unregister_device(ps_data->ps_input_dev);
 	input_free_device(ps_data->ps_input_dev);

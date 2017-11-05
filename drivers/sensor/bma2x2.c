@@ -47,14 +47,15 @@
 #include "sensors_core.h"
 #include "bma2x2_reg.h"
 
-#define CHIP_VENDOR		"BOSCH"
-#define CHIP_NAME		"BMA254"
-#define SENSOR_NAME		"accelerometer_sensor"
-#define CALIBRATION_FILE_PATH	"/efs/FactoryApp/calibration_data"
-#define CALIBRATION_DATA_AMOUNT         20
-#define MAX_ACCEL_1G			1024
-#define MAX_ACCEL_1G_FOR4G		512
-#define ACCEL_LOG_TIME                  15 /* 15 sec */
+#define CHIP_VENDOR					"BOSCH"
+#define CHIP_NAME					"BMA254"
+#define SENSOR_NAME					"accelerometer_sensor"
+#define SENSOR_DEVICE_NODE_NAME		"accel"
+#define CALIBRATION_FILE_PATH		"/efs/FactoryApp/calibration_data"
+#define CALIBRATION_DATA_AMOUNT		20
+#define MAX_ACCEL_1G				1024
+#define MAX_ACCEL_1G_FOR4G			512
+#define ACCEL_LOG_TIME				15 /* 15 sec */
 
 struct bma2x2_v {
 	union {
@@ -1596,6 +1597,8 @@ static int bma2x2_probe(struct i2c_client *client,
 
 	/* only value events reported */
 	dev->name = SENSOR_NAME;
+	// create sensor nodes as /dev/input/event_accel & /sys/class/input/input_accel
+	dev->device_node_name = SENSOR_DEVICE_NODE_NAME;
 	dev->id.bustype = BUS_I2C;
 
 	input_set_capability(dev, EV_REL, REL_X);
@@ -1609,13 +1612,6 @@ static int bma2x2_probe(struct i2c_client *client,
 	if (err < 0)
 		goto exit_register_input_device;
 	data->input = dev;
-
-	err = sensors_create_symlink(&data->input->dev.kobj,
-						data->input->name);
-	if (err < 0) {
-		SENSOR_ERR("failed sensors_create_symlink\n");
-		goto exit_create_symlink;
-	}
 
 	err = sysfs_create_group(&data->input->dev.kobj,
 			&bma2x2_attribute_group);
@@ -1639,8 +1635,6 @@ exit_sensors_register:
 	sysfs_remove_group(&data->input->dev.kobj,
 		&bma2x2_attribute_group);
 exit_create_sysfs_group:
-	sensors_remove_symlink(&data->input->dev.kobj, data->input->name);
-exit_create_symlink:
 	input_unregister_device(data->input);
 exit_register_input_device:
 	input_free_device(dev);

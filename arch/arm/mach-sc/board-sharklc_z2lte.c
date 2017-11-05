@@ -146,8 +146,6 @@ int __init __clock_init_early(void)
 		BIT_UART3_EB		|
 		0);
 	sci_glb_clr(REG_AON_APB_APB_RTC_EB,
-		BIT_KPD_RTC_EB		|
-		BIT_KPD_EB		|
 		BIT_EFUSE_EB		|
 		0);
 

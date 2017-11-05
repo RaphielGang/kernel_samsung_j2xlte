@@ -64,6 +64,9 @@ struct wake_lock alarm_wake_lock;
 
 static struct wakeup_source *ws;
 
+/* whether alarm is fired in suspend flow, as the reason to abort suspend */
+static bool is_fired_in_suspend;
+
 #ifdef CONFIG_RTC_CLASS
 /* rtc timer and device for setting alarm wakeups at suspend */
 static struct rtc_timer		rtctimer;
@@ -201,6 +204,8 @@ static enum hrtimer_restart alarmtimer_fired(struct hrtimer *timer)
 	int ret = HRTIMER_NORESTART;
 	int restart = ALARMTIMER_NORESTART;
 
+	is_fired_in_suspend = pm_freezing;
+
 	spin_lock_irqsave(&base->lock, flags);
 	alarmtimer_dequeue(base, alarm);
 	spin_unlock_irqrestore(&base->lock, flags);
@@ -315,9 +320,8 @@ static int alarmtimer_suspend(struct device *dev)
 	set_time = ktime_add(now, min);
 	tm_set = rtc_ktime_to_tm(set_time);
 
-	pr_info("set alarm at: %d-%d-%d %d:%d:%d\n",
-		tm_set.tm_year + 1900, tm_set.tm_mon + 1, tm_set.tm_mday,
-		tm_set.tm_hour, tm_set.tm_min, tm_set.tm_sec);
+	pr_info("alarm set at %d-%d-%d %d:%d:%d\n",tm_set.tm_year + 1900, tm_set.tm_mon + 1,
+		tm_set.tm_mday,tm_set.tm_hour, tm_set.tm_min, tm_set.tm_sec);
 	pr_info("current rtc time: %d-%d-%d %d:%d:%d\n",
 		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 		tm.tm_hour, tm.tm_min, tm.tm_sec);
@@ -332,6 +336,18 @@ static int alarmtimer_suspend(struct device *dev)
 		pr_err("alarm suspend err %d\n", ret);
 		__pm_wakeup_event(ws, MSEC_PER_SEC);
 	}
+
+	/*
+	 * When system tries to enter suspend state, if it generates one alarm timer
+	 * event at the suspend processing, that will cause one deferred alarm due to
+	 * top level tasks are freezing now. Thus below workaroud fixes this issue.
+	 */
+	if (is_fired_in_suspend) {
+		is_fired_in_suspend = 0;
+		pr_warn("%s, alarm was fired in suspend\n", __FUNCTION__);
+		return -EBUSY;
+	}
+
 	return ret;
 }
 #else

@@ -91,6 +91,17 @@ enum sprd_flash_io_id {
 	FLASH_IOID_MAX
 };
 
+enum sprd_app_info {
+	SPRD_APP_DEFAULT,
+	SPRD_APP_VIDEO_CALL,
+	SPRD_APP_MAX
+};
+
+enum sprd_buf_flag {
+	IMG_BUF_FLAG_INIT,
+	IMG_BUF_FLAG_RUNNING,
+	IMG_BUF_FLAG_MAX
+};
 struct sprd_img_size {
 	uint32_t w;
 	uint32_t h;
@@ -120,6 +131,7 @@ struct sprd_img_parm {
 	uint32_t                  need_isp;
 	uint32_t                  camera_id;
 	uint32_t                  is_reserved_buf;
+	uint32_t                  buf_flag;
 	struct sprd_img_rect      crop_rect;
 	struct sprd_img_size      dst_size;
 	struct sprd_img_frm_addr  frame_addr;
@@ -274,6 +286,7 @@ struct sprd_flash_cfg_param {
 #define SPRD_IMG_IO_GET_TIME          _IOR(SPRD_IMG_IO_MAGIC, 18, struct sprd_img_time)
 #define SPRD_IMG_IO_CHECK_FMT         _IOWR(SPRD_IMG_IO_MAGIC, 19, struct sprd_img_format)
 #define SPRD_IMG_IO_SET_SHRINK        _IOW(SPRD_IMG_IO_MAGIC, 20, uint32_t)
+#define SPRD_IMG_IO_SET_APP_INFO      _IOW(SPRD_IMG_IO_MAGIC, 21, uint32_t)
 #define SPRD_IMG_IO_CFG_FLASH         _IOW(SPRD_IMG_IO_MAGIC, 22, struct sprd_flash_cfg_param)
 
 /*

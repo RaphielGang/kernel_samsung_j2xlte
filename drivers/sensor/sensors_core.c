@@ -23,7 +23,8 @@
 #include <linux/fs.h>
 #include <linux/err.h>
 #include <linux/input.h>
-#include "sensors_core.h"
+#include <sensors_core.h>
+
 #define SENSOR_DEVICE_NODE_NAME		"meta"
 
 struct class *sensors_class;
@@ -251,6 +252,9 @@ int sensors_input_init(void)
 	}
 
 	meta_input_dev->name = "meta_event";
+	// create sensor nodes as /dev/input/event_meta & /sys/class/input/input_meta
+	meta_input_dev->device_node_name = SENSOR_DEVICE_NODE_NAME;
+
 	input_set_capability(meta_input_dev, EV_REL, REL_HWHEEL);
 	input_set_capability(meta_input_dev, EV_REL, REL_DIAL);
 
@@ -260,21 +264,11 @@ int sensors_input_init(void)
 		input_free_device(meta_input_dev);
 	}
 
-	ret = sensors_create_symlink(&meta_input_dev->dev.kobj,
-		meta_input_dev->name);
-	if (ret < 0) {
-		pr_err("[SENSOR CORE] failed create meta symlink\n");
-		input_unregister_device(meta_input_dev);
-		input_free_device(meta_input_dev);
-	}
-
 	return ret;
 }
 
 void sensors_input_clean(void)
 {
-	sensors_remove_symlink(&meta_input_dev->dev.kobj,
-		meta_input_dev->name);
 	input_unregister_device(meta_input_dev);
 	input_free_device(meta_input_dev);
 }

@@ -43,6 +43,8 @@
 #define VENDOR		"CAPELLA"
 #define CHIP_ID		"CM36672P"
 
+#define SENSOR_DEVICE_NODE_NAME		"prox"
+
 #define I2C_M_WR	0 /* for i2c Write */
 #define I2c_M_RD	1 /* for i2c Read */
 
@@ -1133,6 +1135,9 @@ static int cm36672p_i2c_probe(struct i2c_client *client,
 
 	input_set_drvdata(data->proximity_input_dev, data);
 	data->proximity_input_dev->name = "proximity_sensor";
+	// create sensor nodes as /dev/input/event_prox & /sys/class/input/input_prox
+	data->proximity_input_dev->device_node_name = SENSOR_DEVICE_NODE_NAME;
+
 	input_set_capability(data->proximity_input_dev, EV_ABS,
 		ABS_DISTANCE);
 	input_set_abs_params(data->proximity_input_dev, ABS_DISTANCE, 0, 1,
@@ -1142,13 +1147,6 @@ static int cm36672p_i2c_probe(struct i2c_client *client,
 	if (ret < 0) {
 		SENSOR_ERR("could not register input device\n");
 		goto err_input_register_device;
-	}
-
-	ret = sensors_create_symlink(&data->proximity_input_dev->dev.kobj,
-		data->proximity_input_dev->name);
-	if (ret < 0) {
-		SENSOR_ERR("create_symlink error\n");
-		goto err_sensors_create_symlink_prox;
 	}
 
 	ret = sysfs_create_group(&data->proximity_input_dev->dev.kobj,
@@ -1209,9 +1207,6 @@ err_setup_irq:
 	sysfs_remove_group(&data->proximity_input_dev->dev.kobj,
 		&proximity_attribute_group);
 err_sysfs_create_group_proximity:
-	sensors_remove_symlink(&data->proximity_input_dev->dev.kobj,
-		data->proximity_input_dev->name);
-err_sensors_create_symlink_prox:
 	input_unregister_device(data->proximity_input_dev);
 err_input_register_device:
 	input_free_device(data->proximity_input_dev);

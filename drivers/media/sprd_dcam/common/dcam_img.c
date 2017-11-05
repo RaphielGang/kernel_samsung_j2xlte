@@ -32,6 +32,7 @@
 #include <soc/sprd/hardware.h>
 #include <soc/sprd/adi.h>
 #endif
+#include <soc/sprd/dmc_misc.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/proc_fs.h>
@@ -201,6 +202,7 @@ struct dcam_info {
 	uint32_t                   flash_status;
 	uint32_t                   after_af;
 	uint32_t                   is_smooth_zoom;
+	uint32_t                   app_info;
 	struct timeval             timestamp;
 	uint32_t                   camera_id;
 };
@@ -2584,6 +2586,7 @@ static long sprd_img_k_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	uint32_t                 skip_num;
 	uint32_t                 flash_status;
 	uint32_t                 zoom;
+	uint32_t                 app_info;
 	struct sprd_img_parm     parm;
 	struct sprd_img_size     size;
 	struct sprd_img_rect     rect;
@@ -2797,6 +2800,22 @@ static long sprd_img_k_ioctl(struct file *file, unsigned int cmd, unsigned long 
 		mutex_unlock(&dev->dcam_mutex);
 		DCAM_TRACE("SPRD_IMG: SPRD_IMG_IO_SET_ZOOM_MODE, zoom mode %d \n", dev->dcam_cxt.is_smooth_zoom);
 		break;
+		
+	case SPRD_IMG_IO_SET_APP_INFO:
+		mutex_lock(&dev->dcam_mutex);
+		ret = copy_from_user(&app_info, (uint32_t *)arg, sizeof(uint32_t));
+		if (ret) {
+			printk("sprd_img_k_ioctl: fail to get user info \n");
+			mutex_unlock(&dev->dcam_mutex);
+			goto exit;
+		}
+		dev->dcam_cxt.app_info = app_info;
+		if (SPRD_APP_VIDEO_CALL == app_info) {
+			dynamic_dmc_qos_config(1, 1);
+		}
+		mutex_unlock(&dev->dcam_mutex);
+		printk("SPRD_IMG: SPRD_IMG_IO_SET_APP_INFO, %d \n", dev->dcam_cxt.app_info);
+		break;		
 
 	case SPRD_IMG_IO_SET_SENSOR_IF:
 	{
@@ -2917,9 +2936,10 @@ static long sprd_img_k_ioctl(struct file *file, unsigned int cmd, unsigned long 
 					parm.frame_addr.u,
 					parm.frame_addr.v);
 
-				if (unlikely(1 == atomic_read(&dev->stream_on)) && path->status == PATH_RUN) {
+				if (unlikely(1 == atomic_read(&dev->stream_on)) && path->status == PATH_RUN && IMG_BUF_FLAG_RUNNING == parm.buf_flag) {
 					ret = path_cfg(DCAM_PATH_OUTPUT_ADDR, &frame_addr);
 				} else {
+					if (IMG_BUF_FLAG_INIT == parm.buf_flag) {
 						buf_addr.frm_addr.yaddr = parm.frame_addr.y;
 						buf_addr.frm_addr.uaddr = parm.frame_addr.u;
 						buf_addr.frm_addr.vaddr = parm.frame_addr.v;
@@ -2929,6 +2949,9 @@ static long sprd_img_k_ioctl(struct file *file, unsigned int cmd, unsigned long 
 						buf_addr.frm_addr_vir.vaddr = parm.frame_addr_vir.v;
 						buf_addr.frm_addr_vir.zsl_private = parm.reserved[0];
 						ret = sprd_img_buf_queue_write(&path->buf_queue, &buf_addr);
+					} else {
+						printk("sprd_img_k_ioctl: no need to SET_FRAME_ADDR \n");
+					}
 				}
 			}
 		}

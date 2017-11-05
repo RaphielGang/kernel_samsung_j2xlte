@@ -47,6 +47,7 @@
 #define VENDOR_NAME                   "STM"
 #define MODEL_NAME                    "K2HH"
 #define MODULE_NAME                   "accelerometer_sensor"
+#define SENSOR_DEVICE_NODE_NAME       "accel"
 
 #define CALIBRATION_FILE_PATH         "/efs/FactoryApp/accel_calibration_data"
 #define CALIBRATION_DATA_AMOUNT       20
@@ -1540,6 +1541,8 @@ static int k2hh_input_init(struct k2hh_p *data)
 		return -ENOMEM;
 
 	dev->name = MODULE_NAME;
+	// create sensor nodes as /dev/input/event_accel & /sys/class/input/input_accel
+	dev->device_node_name = SENSOR_DEVICE_NODE_NAME;
 	dev->id.bustype = BUS_I2C;
 
 	input_set_capability(dev, EV_REL, REL_X);
@@ -1553,10 +1556,6 @@ static int k2hh_input_init(struct k2hh_p *data)
 	if (ret < 0)
 		goto err_register_input_dev;
 
-	ret = sensors_create_symlink(&dev->dev.kobj, dev->name);
-	if (ret < 0)
-		goto err_create_sensor_symlink;
-
 	/* sysfs node creation */
 	ret = sysfs_create_group(&dev->dev.kobj, &k2hh_attribute_group);
 	if (ret < 0)
@@ -1567,8 +1566,6 @@ static int k2hh_input_init(struct k2hh_p *data)
 	return 0;
 
 err_create_sysfs_group:
-	sensors_remove_symlink(&dev->dev.kobj, dev->name);
-err_create_sensor_symlink:
 	input_unregister_device(dev);
 err_register_input_dev:
 	input_free_device(dev);
@@ -1814,7 +1811,6 @@ exit_iio_trigger_failed:
 exit_iio_buffer_failed:
 	i2c_set_clientdata(client, NULL);
 #else
-	sensors_remove_symlink(&data->input->dev.kobj, data->input->name);
 	sysfs_remove_group(&data->input->dev.kobj, &k2hh_attribute_group);
 	input_unregister_device(data->input);
 exit_input_init:
@@ -1867,7 +1863,6 @@ static int k2hh_remove(struct i2c_client *client)
 		iio_device_free(indio_dev);
 	}
 #else
-	sensors_remove_symlink(&data->input->dev.kobj, data->input->name);
 	sysfs_remove_group(&data->input->dev.kobj, &k2hh_attribute_group);
 	input_unregister_device(data->input);
 #endif

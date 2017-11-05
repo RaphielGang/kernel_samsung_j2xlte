@@ -596,6 +596,7 @@ static int sprd_codec_test_fun(struct sprd_codec_priv *sprd_codec, int fun)
 
 static void sprd_codec_wait(u32 wait_time)
 {
+	sp_asoc_pr_dbg("%s %d ms.\n", __func__, wait_time);
 	if (wait_time)
 		schedule_timeout_uninterruptible(msecs_to_jiffies(wait_time));
 }
@@ -1769,9 +1770,6 @@ static inline void sprd_codec_hp_pa_cgcal_en(struct snd_soc_codec *codec,
 	*/
 	mask = BIT(CG_HPCAL_EN);
 	val = on ? mask : 0;
-	if (is_low_power_support())
-		if (val == 0)
-			val = mask;
 	snd_soc_update_bits(codec, SOC_REG(ANA_CDC3), mask, val);
 }
 
@@ -2026,6 +2024,28 @@ static int sprd_inter_headphone_pa(struct snd_soc_codec *codec, int on)
 	return 0;
 }
 
+/* Check if the calibration of class G is ready. If no, bypass the class G
+ * calibrating this time.
+*/
+static int classg_cal_valid_check(struct snd_soc_codec *codec)
+{
+	unsigned int val, mask;
+
+	val = snd_soc_read(codec, ANA_STS0);
+	if (!(val & BIT(CG_HP_DVLD))) {
+		pr_debug("%s class g calibration is valid.\n", __func__);
+		return 0;
+	}
+
+	pr_err("%s, class G calibration failed! sts0: %#x\n", __func__, val);
+
+	pr_err("%s, clear bit AUDIO_POP_CHGR_PD of ANA_CDC16.\n", __func__);
+	snd_soc_update_bits(codec, ANA_CDC16,
+			    BIT(AUDIO_POP_CHGR_PD), 0);
+
+	return -1;
+}
+
 static int sprd_inter_headphone_pa_post(struct snd_soc_codec *codec, int on)
 {
 	struct sprd_codec_priv *sprd_codec = snd_soc_codec_get_drvdata(codec);
@@ -2037,13 +2057,13 @@ static int sprd_inter_headphone_pa_post(struct snd_soc_codec *codec, int on)
 		//sprd_codec_wait(p_setting->class_g_unmute_delay_100ms * 100);
 		/* L/R EN */
 		sprd_codec_hp_pa_mode(codec, p_setting->class_g_mode);
-		sprd_codec_hp_pa_cgcal_en(codec, p_setting->class_g_cgcal);
+		sprd_codec_hp_pa_cgcal_en(codec, 1);
 
 		sprd_codec_wait(p_setting->class_g_pa_en_delay_10ms * 10);
 		sprd_codec_hp_pa_hpl_en(codec, 1);
 		sprd_codec_hp_pa_hpr_en(codec, 1);
 		sprd_codec_wait(p_setting->class_g_hp_on_delay_20ms * 20);
-
+		classg_cal_valid_check(codec);
 		/*unmute */
 		sprd_codec_hp_pa_hpl_mute(codec, 0);
 		sprd_codec_hp_pa_hpr_mute(codec, 0);
@@ -2256,7 +2276,6 @@ static int sprd_codec_analog_open(struct snd_soc_codec *codec)
 		snd_soc_update_bits(codec, SOC_REG(ANA_CDC16), (HP_CLASSAB_IBIS_CTL_MASK << HP_CLASSAB_IBIS_CTL_OFFSET), (HP_CLASSAB_IBIS_CTL_3_PER_7 << HP_CLASSAB_IBIS_CTL_OFFSET));
 		snd_soc_update_bits(codec, SOC_REG(ANA_CDC16), BIT(AUDIO_POP_CHGR_PD), BIT(AUDIO_POP_CHGR_PD));
 		snd_soc_update_bits(codec, SOC_REG(ANA_CDC16), BIT(AUDIO_POP_SOFTCHG_EN), BIT(AUDIO_POP_SOFTCHG_EN));
-		snd_soc_update_bits(codec, SOC_REG(ANA_CDC3), BIT(CG_HPCAL_EN), BIT(CG_HPCAL_EN));
 		/* B Setting */
 		if (LOW_PWR_SUPPORT_ALL == is_low_power_support()) {
 			snd_soc_update_bits(codec, SOC_REG(ANA_CDC1), (ADC_PGAL_BYP_SEL_MASK << ADCPGAL_BYP), (ADC_PGAL_BYP_SEL_PGAL1_2_ADCL << ADCPGAL_BYP));
@@ -4141,7 +4160,6 @@ static int sprd_codec_inter_hp_pa_put(struct snd_kcontrol *kcontrol,
 		sprd_codec_hp_pa_lpw(codec, p_setting->class_g_low_power);
 		sprd_codec_hp_pa_mode(codec, p_setting->class_g_mode);
 		sprd_codec_hp_pa_osc(codec, p_setting->class_g_osc);
-		sprd_codec_hp_pa_cgcal_en(codec, p_setting->class_g_cgcal);
 	} else {
 		mutex_unlock(&sprd_codec->inter_hp_pa_mutex);
 	}

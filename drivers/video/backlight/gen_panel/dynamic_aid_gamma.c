@@ -289,7 +289,7 @@ static int voltage_adjustment(struct SMART_DIM *pSmart, int volt)
 	if (volt == VOLT_V255) {
 		for (offset = R_OFFSET; offset <= B_OFFSET; offset++) {
 			add_mtp = REF_MTP[volt][offset] + MTP[volt][offset];
-			result_1 = result_2 = (v_coeff[volt].numerator + add_mtp) << BIT_SHIFT;
+			result_1 = result_2 = (unsigned long long)(v_coeff[volt].numerator + add_mtp) << BIT_SHIFT;
 			do_div(result_2, v_coeff[volt].denominator);
 			result_3 = (pSmart->vregout_voltage * result_2) >> BIT_SHIFT;
 			result_4 = pSmart->vregout_voltage - result_3;
@@ -300,7 +300,7 @@ static int voltage_adjustment(struct SMART_DIM *pSmart, int volt)
 		for (offset = R_OFFSET; offset <= B_OFFSET; offset++) {
 			LSB = MTP[volt][offset];
 			add_mtp = REF_MTP[volt][offset] + MTP[volt][offset];
-			result_1 = result_2 = vt_coefficient[LSB] << BIT_SHIFT;
+			result_1 = result_2 = (unsigned long long)(vt_coefficient[LSB]) << BIT_SHIFT;
 			do_div(result_2, v_coeff[volt].denominator);
 			result_3 = (pSmart->vregout_voltage * result_2) >> BIT_SHIFT;
 			result_4 = pSmart->vregout_voltage - result_3;
@@ -311,7 +311,7 @@ static int voltage_adjustment(struct SMART_DIM *pSmart, int volt)
 			add_mtp = REF_MTP[volt][offset] + MTP[volt][offset];
 			result_1 = (pSmart->vregout_voltage)
 				- ((int *)(&pSmart->RGB_OUTPUT))[offset * VOLT_MAX + volt + 1];
-			result_2 = (v_coeff[volt].numerator + add_mtp) << BIT_SHIFT;
+			result_2 = (unsigned long long)(v_coeff[volt].numerator + add_mtp) << BIT_SHIFT;
 			do_div(result_2, v_coeff[volt].denominator);
 
 			result_3 = (result_1 * result_2) >> BIT_SHIFT;
@@ -323,7 +323,7 @@ static int voltage_adjustment(struct SMART_DIM *pSmart, int volt)
 			add_mtp = REF_MTP[volt][offset] + MTP[volt][offset];
 			result_1 = ((int *)(&pSmart->GRAY.VT_TABLE))[offset]
 				- ((int *)(&pSmart->RGB_OUTPUT))[offset * VOLT_MAX + volt + 1];
-			result_2 = (v_coeff[volt].numerator + add_mtp) << BIT_SHIFT;
+			result_2 = (unsigned long long)(v_coeff[volt].numerator + add_mtp) << BIT_SHIFT;
 			do_div(result_2, v_coeff[volt].denominator);
 			result_3 = (result_1 * result_2) >> BIT_SHIFT;
 			result_4 = ((int *)(&pSmart->GRAY.VT_TABLE))[offset] - result_3;
@@ -383,17 +383,17 @@ static void voltage_hexa(int *index, struct SMART_DIM *pSmart, int *str, int vol
 static int cal_gray_scale_linear(int up, int low, int coeff,
 		int mul, int deno, int cnt)
 {
-	unsigned long long result_1, result_2, result_3, result_4;
-	int sign;
+	unsigned long long result_1, result_2;
+	int sign, result_3, result_4;
 
 	sign = (up < low) ? -1 : 1;
 	result_1 = abs(up - low);
 	result_2 = (result_1 * (coeff - (cnt * mul))) << BIT_SHIFT;
 	do_div(result_2, deno);
-	result_3 = result_2 >> BIT_SHIFT;
+	result_3 = (int)(result_2 >> BIT_SHIFT);
 	result_4 = low + (sign * result_3);
 
-	return (int)result_4;
+	return result_4;
 }
 
 static int generate_gray_scale(struct SMART_DIM *pSmart)

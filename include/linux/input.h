@@ -42,6 +42,8 @@ struct input_value {
 /**
  * struct input_dev - represents an input device
  * @name: name of the device
+ * @device_node_name: name of the device node (must be unique). 
+ *  Used to assign name instead of number
  * @phys: physical path to the device in the system hierarchy
  * @uniq: unique identification code for the device (if device has it)
  * @id: id of the device (struct input_id)
@@ -123,6 +125,7 @@ struct input_value {
  */
 struct input_dev {
 	const char *name;
+	const char *device_node_name;
 	const char *phys;
 	const char *uniq;
 	struct input_id id;

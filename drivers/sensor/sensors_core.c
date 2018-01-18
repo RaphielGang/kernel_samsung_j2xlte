@@ -23,7 +23,7 @@
 #include <linux/fs.h>
 #include <linux/err.h>
 #include <linux/input.h>
-#include <sensors_core.h>
+#include "sensors_core.h"
 
 #define SENSOR_DEVICE_NODE_NAME		"meta"
 
